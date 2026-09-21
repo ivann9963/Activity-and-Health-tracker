@@ -1,0 +1,17 @@
+# Cloudflare Pages project configuration.
+#
+# The site is static and lives in _site/ after `npm run build`. The functions/
+# directory is picked up automatically by Pages and deployed as Pages Functions —
+# that is where the OAuth token broker lives, because the Google Health API issues a
+# client secret and a static page cannot hold one.
+#
+# Two secrets must be set in the Cloudflare dashboard (Settings → Environment
+# variables → add as "Secret", not plaintext):
+#   GOOGLE_CLIENT_ID
+#   GOOGLE_CLIENT_SECRET
+#
+# They are never committed and never reach the browser.
+
+name = "activity-ledger"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "_site"

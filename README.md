@@ -35,11 +35,9 @@ supports PKCE, so a static page can do it with no backend) and Strava import.
 
 ## Live
 
-Published to GitHub Pages on every push to the default branch, after the tests pass:
-
-**https://ivann9963.github.io/Activity-and-Health-tracker/**
-
-(Pending the one-time Pages setup described under *Build and deploy* below.)
+Deployed to Cloudflare Pages on every push to the default branch. Open it in Safari on
+your iPhone and use **Share → Add to Home Screen** to install it. It works offline once
+installed, and your data never leaves the device.
 
 Open it in Safari on your iPhone and use **Share → Add to Home Screen** to install it.
 It works offline once installed, and your data never leaves the device.
@@ -69,24 +67,60 @@ everything it `importScripts`), bakes that into the service worker's precache ma
 so the two can never drift apart, and stamps the commit as a build id so a deploy
 invalidates the previous cache instead of stranding people on a stale copy.
 
-Deployment is `.github/workflows/deploy.yml`.
+Hosting is **Cloudflare Pages**, connected directly to this repository — no deploy
+workflow needed, Cloudflare builds on push.
 
-**One-time setup, required once by a repository admin:** *Settings → Pages → Source:
-**GitHub Actions***. This genuinely cannot be automated — the workflow asks
-`configure-pages` to create the site, but the default `GITHUB_TOKEN` is refused
-(*"Create Pages site failed: Resource not accessible by integration"*), because
-creating a Pages site needs administration rights a workflow token never gets. Every
-deploy after that is automatic.
+One-time setup in the Cloudflare dashboard:
 
-To publish to your own domain instead, set a repository variable `CUSTOM_DOMAIN` — the
-build writes the `CNAME` file and Pages picks it up.
+1. **Workers & Pages → Create → Pages → Connect to Git**, pick this repository.
+2. Build command `npm run build`, output directory `_site`.
+3. **Settings → Environment variables**, added as **Secret** (not plaintext):
+   `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Without them the app runs fine and
+   simply reports that sync is not set up.
+4. A custom domain is **Custom domains → Set up a domain** — no repository change.
+
+GitHub Pages was tried first and abandoned: it cannot host the OAuth broker, and
+enabling it in the first place turned out to need repository-admin rights a workflow
+token never receives.
+
+## Automatic sync
+
+Fitbit's own Web API was retired in September 2026 — hard cutoff, registrations closed,
+tokens not transferable. Its replacement is the **Google Health API**, which is an
+aggregation layer rather than a device API: one connection to a Google account returns
+data from everything attached to it, Fitbit included.
+
+That API issues a **client secret**, which a static page cannot hold. So `functions/`
+contains a small OAuth broker, deployed as Cloudflare Pages Functions:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/oauth/start` | Begins consent; sets a CSRF state cookie |
+| `GET /api/oauth/callback` | Exchanges the code; stores the refresh token |
+| `POST /api/oauth/access-token` | Trades the refresh token for a short-lived access token |
+| `GET /api/oauth/status` | Whether this browser is connected |
+| `POST /api/oauth/disconnect` | Revokes at Google and clears the cookie |
+
+Two deliberate choices:
+
+- **The broker never sees health data.** It handles tokens only; the page calls
+  `health.googleapis.com` directly. A step count never passes through a server.
+- **The refresh token lives in an httpOnly cookie**, not in storage the page can read.
+  Script on the page cannot reach it, so an XSS bug cannot walk off with long-lived
+  access to a health record. The page only ever holds an access token, in memory,
+  valid for an hour.
+
+Google Health scopes are restricted, which means verification is required to launch
+publicly — but an unverified app serves up to 100 users, so a personal deployment
+simply adds itself as a test user and needs no review.
 
 ## Tests
 
 ```bash
-npm test               # unit tests — no dependencies, no browser, ~1s
-npm run test:ui        # drives the real UI in Chromium (needs: npm install)
-npm run test:ui:build  # the same checks against the built output in _site/
+npm test                 # unit tests — no dependencies, no browser, ~1s
+npm run check:functions  # the Pages Functions parse (they never run in the unit tests)
+npm run test:ui          # drives the real UI in Chromium (needs: npm install)
+npm run test:ui:build    # the same checks against the built output in _site/
 ```
 
 The unit tests load the real `js/` modules into a sandboxed Node context via
@@ -143,6 +177,8 @@ js/
   routing.js          hash router; views register themselves
   ui-components.js    toast, dialog, progress bar, escaping
   dashboard.js · settings.js · pwa-init.js · app.js
+  sync/
+    google-health.js  the browser half of the OAuth flow; never touches a secret
   import/
     zip.js            streaming ZIP reader built on DecompressionStream
     csv.js            RFC4180 parser
@@ -164,9 +200,11 @@ js/
     engine.js         runs both passes and writes back what changed
     review-ui.js      the Duplicates screen
   rollups.js          records -> week / month / year numbers
+functions/api/oauth/  the OAuth token broker (Cloudflare Pages Functions)
+wrangler.toml         Cloudflare Pages project config
 sw.js                 service worker; its precache list is generated by the build
 tools/build.js        collects assets, generates the service worker, stamps a build id
-.github/workflows/    ci.yml (every push) · deploy.yml (Pages, on the default branch)
+.github/workflows/    ci.yml — tests on every push; Cloudflare deploys on its own
 tests/
   run.js · harness.js · ui-smoke.mjs · fixtures/
 ```

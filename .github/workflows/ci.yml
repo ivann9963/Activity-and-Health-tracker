@@ -26,6 +26,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Check the Pages Functions parse
+        run: npm run check:functions
+
       - name: Build
         run: npm run build
 

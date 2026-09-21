@@ -4,8 +4,16 @@
 // decides which device's numbers win, and it is worth being able to see at a glance.
 
 function renderSettings(host) {
-  return Promise.all([loadSettings(), dbCount('sessions'), dbCount('daily'), metricsWithData()])
-    .then(([settings, sessions, daily, withData]) => {
+  // The OAuth callback lands on this screen, so report its outcome before rendering.
+  const callback = consumeGoogleCallback();
+  if (callback) {
+    const msg = googleCallbackMessage(callback);
+    showToast(msg.text, msg.kind);
+  }
+
+  return Promise.all([loadSettings(), dbCount('sessions'), dbCount('daily'),
+                      metricsWithData(), googleStatus()])
+    .then(([settings, sessions, daily, withData, google]) => {
       const sources = Object.entries(settings.sourcePriority).sort((a, b) => b[1] - a[1]);
       host.innerHTML = `
         <div class="view-head"><h1>Settings</h1></div>
@@ -27,6 +35,8 @@ function renderSettings(host) {
             </select>
           </label>
         </div>
+
+        ${googleCardHtml(google)}
 
         <div class="card">
           <h2>Tiles to show</h2>
@@ -69,6 +79,19 @@ function renderSettings(host) {
           </div>
         </div>`;
 
+      const connectBtn = el('google-connect');
+      if (connectBtn) connectBtn.onclick = connectGoogle;
+      const disconnectBtn = el('google-disconnect');
+      if (disconnectBtn) disconnectBtn.onclick = () => confirmDialog({
+        title: 'Disconnect Google Health?',
+        message: 'The app stops receiving new data and the permission is revoked in ' +
+                 'your Google account. Everything already imported stays.',
+        confirmLabel: 'Disconnect', danger: true
+      }, () => disconnectGoogle().then(() => {
+        showToast('Disconnected', 'success');
+        refreshView();
+      }));
+
       el('set-units').onchange = ev => setSetting('units', ev.target.value)
         .then(() => showToast('Units updated', 'success'));
       el('set-week').onchange = ev => setSetting('firstDayOfWeek', ev.target.value)
@@ -108,6 +131,47 @@ function renderSettings(host) {
           .then(() => { showToast('All data deleted', 'success'); refreshView(); });
       });
     });
+}
+
+// Live sync. Fitbit's own Web API was retired in September 2026, so the Google Health
+// API is the only route to automatic data — and being an aggregation layer, it covers
+// whatever is attached to the Google account rather than one device.
+function googleCardHtml(google) {
+  if (!google.available) {
+    return `<div class="card">
+      <h2>Automatic sync</h2>
+      <p class="subtle">Syncing needs the deployed version of this app — the part that
+         talks to Google cannot run from a local file server. Import an export file on
+         the Data screen instead.</p>
+    </div>`;
+  }
+  if (!google.configured) {
+    return `<div class="card">
+      <h2>Automatic sync</h2>
+      <p class="subtle">Not set up yet. The deployment needs
+         <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> set as
+         environment variables before Google Health can be connected.</p>
+    </div>`;
+  }
+  if (google.connected) {
+    return `<div class="card">
+      <h2>Automatic sync</h2>
+      <p class="subtle"><span class="yes">✓ Connected to Google Health.</span>
+         New data arrives without exporting anything by hand.</p>
+      <div class="card-actions">
+        <button class="btn btn-ghost" id="google-disconnect">Disconnect</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="card">
+    <h2>Automatic sync</h2>
+    <p class="subtle">Connect your Google account and new activity arrives on its own —
+       no more exporting archives. Read-only: this app can never change your health
+       data. Everything still stays on this device.</p>
+    <div class="card-actions">
+      <button class="btn btn-primary" id="google-connect">Connect Google Health</button>
+    </div>
+  </div>`;
 }
 
 registerView({ id: 'settings', label: 'Settings', icon: '⚙️', render: renderSettings });

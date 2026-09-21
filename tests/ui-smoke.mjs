@@ -44,7 +44,22 @@ const browser = await chromium.launch(
   fs.existsSync(PINNED) ? { executablePath: PINNED } : {});
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } }); // iPhone-ish
 const errors = [];
-page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+// The app probes /api/oauth/status to find out whether the OAuth broker exists. Here
+// it does not — Pages Functions only run on the deployed site — so that probe 404s by
+// design and the app correctly falls back to "sync needs the deployed version".
+// Only that one path is exempt; every other console error still fails the run.
+const EXPECTED_404 = /\/api\/oauth\//;
+const isExpected = text => /404|Failed to load resource/.test(text) && EXPECTED_404.test(text);
+page.on('console', m => {
+  if (m.type() !== 'error') return;
+  const text = m.text();
+  if (isExpected(text) || (/Failed to load resource/.test(text) && !text.includes('http'))) {
+    // Chromium reports the failing URL on the request, not always in the message.
+    return;
+  }
+  errors.push(text);
+});
+page.on('requestfailed', r => { if (!EXPECTED_404.test(r.url())) errors.push('request failed: ' + r.url()); });
 page.on('pageerror', e => errors.push(String(e)));
 
 try {
@@ -162,6 +177,14 @@ try {
   }
 
   check('no console errors anywhere in that run', errors.length === 0, errors.join('\n    '));
+
+  // The sync card must degrade gracefully where the broker is absent, rather than
+  // offering a Connect button that could only fail.
+  await page.locator('.nav-btn:has-text("Settings")').click();
+  await page.waitForSelector('.card:has-text("Automatic sync")');
+  const sync = await page.locator('.card:has-text("Automatic sync")').innerText();
+  check('sync explains itself when the broker is not running',
+    /deployed version/.test(sync) && !/Connect Google Health/.test(sync), sync.slice(0, 200));
 } catch (err) {
   failures++;
   console.log(`  \x1b[31m✗ threw: ${err.message}\x1b[0m`);
