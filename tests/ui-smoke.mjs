@@ -67,9 +67,10 @@ try {
   await page.goto(base, { waitUntil: 'networkidle' });
 
   const tabs = await page.locator('.nav-btn').allTextContents();
-  check('the tab bar carries only the three primary screens', tabs.length === 3,
-    `got ${JSON.stringify(tabs)}`);
-  check('reconciliation is not one of them', !tabs.join(' ').includes('Duplicates'));
+  const tabText = tabs.join(' ');
+  check('the tab bar carries the primary screens', tabs.length === 4, `got ${JSON.stringify(tabs)}`);
+  check('including the year review', /Year/.test(tabText));
+  check('reconciliation is not one of them', !/Duplicates/.test(tabText));
   check('the empty state invites an import',
     await page.locator('.empty-state').isVisible());
 
@@ -131,6 +132,32 @@ try {
   const combined = await page.locator('#view-host').innerText();
   check('Fitbit data reaches the totals', /Racket|Tennis|RACKET/i.test(combined),
     combined.slice(0, 300));
+
+  // --- year in review ---
+  await page.locator('.nav-btn:has-text("Year")').click();
+  await page.waitForSelector('.hero-figure', { timeout: 15000 });
+  const review = await page.locator('#view-host').innerText();
+  check('the review leads with active days', /active days out of/.test(review),
+    review.slice(0, 200));
+  check('totals carry a scale comparison',
+    /marathon|Bulgaria|Sofia|pool|Channel|track|5K/i.test(review), review.slice(0, 600));
+  check('the month chart renders as real SVG',
+    (await page.locator('.months svg').count()) > 0);
+  check('the calendar heatmap renders',
+    (await page.locator('.heatmap .heat-cell').count()) > 300);
+  check('the heatmap has a scale legend',
+    (await page.locator('.heat-swatch').count()) === 5);
+  // Every mark must be able to explain itself on hover — including the empty ones,
+  // where "nothing recorded" is the useful answer rather than silence.
+  const firstChartTips = await page.locator('.months').first().locator('svg title').count();
+  check('every month in a chart carries a tooltip', firstChartTips === 12,
+    `got ${firstChartTips}`);
+  const tipText = await page.locator('.months').first().locator('svg title').first().innerText()
+    .catch(() => '');
+  check('and the tooltip names the month',
+    /January|February|March|April|May|June|July|August|September|October|November|December/
+      .test(await page.locator('.months').first().locator('svg title').first().textContent()),
+    tipText);
 
   await page.locator('.nav-btn:has-text("Data")').click();
   await page.waitForSelector('button:has-text("Review the decisions")', { timeout: 10000 });

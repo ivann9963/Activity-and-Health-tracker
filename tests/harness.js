@@ -25,7 +25,11 @@ const FILES = [
   'js/dedupe/rules.js',
   'js/dedupe/sessions.js',
   'js/dedupe/streams.js',
-  'js/rollups.js'
+  'js/rollups.js',
+  'js/equivalences.js',
+  'js/streaks.js',
+  'js/goals.js',
+  'js/charts.js'
 ];
 
 function loadApp() {
@@ -55,6 +59,7 @@ function loadApp() {
       periodBounds, shiftPeriod,
       // metrics
       METRICS, METRIC_ORDER, metricIds, visibleMetricIds, aggregate, formatMetric,
+      formatMetricAxis, niceCeiling, barPath,
       // taxonomy
       ACTIVITIES, canonicalActivity, activitiesCompatible,
       // records
@@ -77,6 +82,9 @@ function loadApp() {
       sessionsOverlap, overlapRatio, sourceRank, pickWinner, richness,
       PARTIAL_WEAR_RATIO,
       computeRollups,
+      distanceEquivalence, durationEquivalence, stepsEquivalence, equivalenceFor,
+      dayStreaks, weekStreaks, bestDay, bestPeriod, activeThreshold,
+      niceTarget, deriveTarget, goalProgress,
       DEFAULT_SETTINGS
     };`, sandbox, { filename: 'app-bundle.js' });
 

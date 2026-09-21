@@ -104,7 +104,33 @@ function formatMetric(metricId, value, opts) {
   return Math.round(value).toLocaleString() + (m.unit === 'steps' ? '' : ' ' + m.unit);
 }
 
+// Axis ticks and other cramped places. Full formatting gives "0.00 km" for zero and
+// "20,000" where there is room for four characters, so ticks get their own rendering:
+// short, no trailing zeros, and a bare "0" for nothing.
+function formatMetricAxis(metricId, value) {
+  const m = METRICS[metricId];
+  if (value == null || !m) return '';
+  if (value === 0) return '0';
+
+  if (m.display === 'km') {
+    const km = value / 1000;
+    return (km >= 10 ? Math.round(km) : Number(km.toFixed(1))) + ' km';
+  }
+  if (m.display === 'duration') {
+    const totalMin = m.unit === 'min' ? value : value / 60;
+    if (totalMin >= 60) {
+      const h = totalMin / 60;
+      return (h >= 10 ? Math.round(h) : Number(h.toFixed(1))) + 'h';
+    }
+    return Math.round(totalMin) + 'm';
+  }
+  if (value >= 1000000) return Number((value / 1000000).toFixed(1)) + 'M';
+  if (value >= 1000) return Math.round(value / 1000) + 'k';
+  if (m.decimals != null) return value.toFixed(m.decimals);
+  return String(Math.round(value));
+}
+
 if (typeof module !== 'undefined') {
   module.exports = { METRICS, METRIC_ORDER, metricIds, visibleMetricIds,
-                     aggregate, formatMetric };
+                     aggregate, formatMetric, formatMetricAxis };
 }

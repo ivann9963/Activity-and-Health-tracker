@@ -741,12 +741,171 @@ async function fitbitImportTests() {
   });
 }
 
+// --- charts -----------------------------------------------------------------------
+function chartTests() {
+  suite('axis formatting', () => {
+    // Full formatting renders "0.00 km" for nothing and "20,000" where an axis has
+    // room for three characters, so ticks get their own shorter rendering.
+    eq('zero is a bare zero, not a unit', app.formatMetricAxis('distance_run', 0), '0');
+    eq('short distances keep one decimal', app.formatMetricAxis('distance_run', 5200), '5.2 km');
+    eq('long ones drop it', app.formatMetricAxis('distance_run', 447000), '447 km');
+    eq('steps become thousands', app.formatMetricAxis('steps', 20000), '20k');
+    eq('and millions', app.formatMetricAxis('steps', 3400000), '3.4M');
+    eq('durations become hours', app.formatMetricAxis('time_gym', 3600 * 7), '7h');
+    eq('sub-hour stays in minutes', app.formatMetricAxis('time_gym', 1800), '30m');
+  });
+
+  suite('axis scaling', () => {
+    // Ticks should land on numbers a person would write down.
+    eq('a maximum rounds up to a readable ceiling', app.niceCeiling(447), 500);
+    eq('and again at another magnitude', app.niceCeiling(17100), 20000);
+    eq('just over a power of ten', app.niceCeiling(1050), 2000);
+    eq('exactly a power of ten stays put', app.niceCeiling(1000), 1000);
+    eq('nothing has no scale', app.niceCeiling(0), 0);
+  });
+
+  suite('bar geometry', () => {
+    // The data-end is rounded and the baseline is square: rounding both would
+    // detach the mark from the axis it grows out of.
+    const path = app.barPath(10, 20, 12, 40, 4);
+    ok('the bar starts at its baseline', path.startsWith('M10,60'));
+    ok('and curves only at the top', (path.match(/Q/g) || []).length === 2);
+    eq('a zero-height bar draws nothing', app.barPath(0, 0, 10, 0, 4), '');
+    // A radius larger than the bar would invert the curve.
+    ok('the radius is capped by the bar itself',
+       app.barPath(0, 0, 4, 40, 10).includes('Q'));
+  });
+}
+
+// --- the motivation layer -------------------------------------------------------------
+function motivationTests() {
+  suite('scale comparisons', () => {
+    // 447 km — the user's actual running year.
+    eq('a year of running, in recognisable units',
+       app.distanceEquivalence(447000), 'the distance from Sofia to Varna');
+    eq('further out, a multiplier of the same yardstick',
+       app.distanceEquivalence(900000), '2 trips from Sofia to Varna');
+    // Close to exactly one: name the thing rather than say "1.0 of it".
+    eq('a near-exact match names the thing', app.distanceEquivalence(340000),
+       'the length of Bulgaria');
+    eq('a modest distance uses a smaller yardstick',
+       app.distanceEquivalence(90000), '2.1 marathons');
+    eq('swimming gets its own scale',
+       app.distanceEquivalence(1500, 'swimming'), '30 lengths of an Olympic pool');
+    // Too small to compare usefully — better to say nothing than to say "0.1 laps".
+    eq('tiny distances have no useful comparison', app.distanceEquivalence(50), null);
+
+    eq('gym hours become days', app.durationEquivalence(3600 * 30), '1.3 full days');
+    eq('scale comparisons never carry spurious precision',
+       app.durationEquivalence(3600 * 31), '1.3 full days');
+    eq('a year in the gym becomes working weeks',
+       app.durationEquivalence(3600 * 252), '6.3 working weeks');
+    eq('an hour is not worth comparing', app.durationEquivalence(3600), null);
+
+    // 3.4M steps at 0.75m ≈ 2,550 km.
+    ok('steps convert to ground covered',
+       /lengths of Great Britain|Sofia to Varna|Danube/.test(app.stepsEquivalence(3388544)),
+       app.stepsEquivalence(3388544));
+
+    eq('a metric with no sensible comparison gets none',
+       app.equivalenceFor('weight', 82), null);
+    eq('zero is never compared', app.equivalenceFor('distance_run', 0), null);
+  });
+
+  suite('streaks', () => {
+    const byDay = {};
+    // Ten consecutive active days, a gap, then three more up to "today".
+    for (const d of ['2026-09-01','2026-09-02','2026-09-03','2026-09-04','2026-09-05',
+                     '2026-09-06','2026-09-07','2026-09-08','2026-09-09','2026-09-10']) byDay[d] = 5000;
+    for (const d of ['2026-09-18','2026-09-19','2026-09-20']) byDay[d] = 6000;
+
+    const s = app.dayStreaks(byDay, '2026-09-01', '2026-09-21', 'distance_run', '2026-09-21');
+    eq('the longest run is found', s.longest, 10);
+    eq('and dated', [s.longestStart, s.longestEnd], ['2026-09-01', '2026-09-10']);
+    // Today is not over, so a run ending yesterday is still live. Ending it at
+    // midnight would report a broken streak while the shoes are still being laced.
+    eq('a run ending yesterday is still current', s.current, 3);
+    eq('active days are counted', s.activeDays, 13);
+    eq('out of the whole range', s.totalDays, 21);
+
+    const broken = app.dayStreaks(byDay, '2026-09-01', '2026-09-25', 'distance_run', '2026-09-25');
+    eq('a run that stopped days ago is not current', broken.current, 0);
+
+    // Steps need a threshold: a phone in a pocket logs a few hundred on a sofa day.
+    const steps = { '2026-09-01': 300, '2026-09-02': 9000, '2026-09-03': 200 };
+    eq('a sofa day does not count as an active step day',
+       app.dayStreaks(steps, '2026-09-01', '2026-09-03', 'steps', '2026-09-03').activeDays, 1);
+    eq('but any distance at all counts for running',
+       app.dayStreaks({ '2026-09-01': 500 }, '2026-09-01', '2026-09-01',
+                      'distance_run', '2026-09-01').activeDays, 1);
+
+    // For something done twice a week, a day streak is always 1 and says nothing.
+    const gym = { '2026-09-01': 3600, '2026-09-04': 3600, '2026-09-08': 3600,
+                  '2026-09-11': 3600, '2026-09-15': 3600 };
+    const w = app.weekStreaks(gym, '2026-09-01', '2026-09-21', 'time_gym', 'monday', '2026-09-16');
+    eq('three consecutive active weeks', w.longest, 3);
+    eq('and the run is current', w.current, 3);
+
+    eq('the best day is found', app.bestDay(byDay).value, 6000);
+    eq('the best month too', app.bestPeriod(byDay, 'month').key, '2026-09');
+  });
+
+  suite('goals — derived from what actually happened', () => {
+    eq('a running target rounds to something a person would choose',
+       app.niceTarget(512340, 'distance_run'), 500000);
+    eq('small distances round finer', app.niceTarget(23400, 'distance_run'), 25000);
+    eq('gym time rounds to whole hours', app.niceTarget(3600 * 61.4, 'time_gym'), 3600 * 60);
+    eq('steps round to a readable number', app.niceTarget(3388544, 'steps'), 3500000);
+
+    // A year at ~1.22 km/day, stretched by 8% and rounded.
+    const byDay = {};
+    for (const d of dateRangeOf('2025-09-21', 365)) byDay[d] = 1225;
+    const target = app.deriveTarget('distance_run', byDay, '2025-09-21', '2026-09-20', 'year');
+    ok('a year target lands near last year plus a stretch',
+       target >= 450000 && target <= 500000, String(target));
+
+    eq('too little history proposes nothing',
+       app.deriveTarget('distance_run', { '2026-09-01': 5000 }, '2026-09-01', '2026-09-05', 'year'),
+       null);
+    eq('a metric with no meaningful total gets no goal',
+       app.deriveTarget('weight', byDay, '2025-09-21', '2026-09-20', 'year'), null);
+
+    const bounds = { from: '2026-01-01', to: '2026-12-31' };
+    // Half the year gone, half the target done: exactly on pace.
+    const onPace = app.goalProgress(500000, 250000, bounds, '2026-07-02');
+    ok('being level with the calendar reads as on pace',
+       Math.abs(onPace.ahead) < 2000, String(onPace.ahead));
+    eq('and the percentage is separate from the pace', Math.round(onPace.pct), 50);
+
+    const ahead = app.goalProgress(500000, 300000, bounds, '2026-07-02');
+    ok('running ahead of the calendar shows as ahead', ahead.ahead > 45000, String(ahead.ahead));
+    ok('and it says what is left per day', ahead.perDayNeeded > 0 && ahead.daysLeft > 180);
+
+    const done = app.goalProgress(500000, 520000, bounds, '2026-12-31');
+    ok('a target met is marked met', done.hit && done.remaining === 0);
+    eq('percentage never runs past 100', done.pct, 100);
+
+    // After the period ends, "expected" is the whole target, not a fraction of it.
+    const over = app.goalProgress(500000, 400000, bounds, '2027-02-01');
+    ok('a finished period compares against the full target',
+       over.finished && Math.round(over.expected) === 500000);
+  });
+}
+
+function dateRangeOf(start, days) {
+  const out = [];
+  for (let i = 0; i < days; i++) out.push(app.addDays(start, i));
+  return out;
+}
+
 // --- run ------------------------------------------------------------------------------
 (async () => {
   try {
     await appleTests();
     fixtureDedupeTests();
     rollupTests();
+    motivationTests();
+    chartTests();
     await zipTests();
     await takeoutTests();
     fitbitParseTests();

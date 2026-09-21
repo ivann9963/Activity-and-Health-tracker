@@ -142,7 +142,8 @@ body {
 }
 .data-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
 .data-table tr:last-child td { border-bottom: none; }
-.data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums;
+                   white-space: nowrap; }
 .yes { color: var(--accent); }
 .no { color: var(--text-dim); }
 .rank-input {
@@ -257,9 +258,7 @@ pre.scroll { max-height: 260px; overflow-y: auto; }
 .metric-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
 
 /* Bars are decorative context, not a data table — screen readers skip them and the
-   numbers above carry the meaning. */
-.bars { display: flex; align-items: flex-end; gap: 2px; height: 30px; margin-top: 10px; }
-.bar { flex: 1; background: var(--accent-dim); border-radius: 1px; min-height: 2px; opacity: .75; }
+   numbers above carry the meaning. Their mark spec lives with the charts, below. */
 
 .all-time .stat-value { font-size: 20px; }
 
@@ -307,3 +306,72 @@ pre.scroll { max-height: 260px; overflow-y: auto; }
    is pointer-events:none so that ordinary toasts never block a tap. */
 .toast-update { display: flex; align-items: center; gap: 12px; pointer-events: auto;
                 border-radius: 12px; }
+
+/* === CHARTS ====================================================================
+   The heatmap ramp is a single hue, monotone in lightness, with each step's gap
+   wide enough to read and the palest step still clearing its own surface. Both
+   modes were checked with the palette validator rather than chosen by eye — the
+   first attempt failed on exactly that last point in both themes, the palest green
+   sitting at 1.07:1 against white.
+   heat-0 is the "nothing recorded" state and is deliberately outside the ramp: it
+   reads as surface, not as a low value. */
+:root {
+  --heat-0: #1e222b;
+  --heat-1: #1a6b3c;
+  --heat-2: #189e4c;
+  --heat-3: #34d16a;
+  --heat-4: #7ff0ad;
+}
+:root[data-theme="light"] {
+  --heat-0: #eceef2;
+  --heat-1: #43c477;
+  --heat-2: #1d934e;
+  --heat-3: #116b36;
+  --heat-4: #073c20;
+}
+
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart-tick { font-size: 10px; font-family: var(--font); }
+.chart-bar { transition: opacity .12s; }
+.chart-bar:hover { opacity: .8; }
+.heat-cell { transition: opacity .12s; }
+.heat-cell:hover { opacity: .75; }
+.heatmap { min-width: 620px; }
+.heat-legend { display: flex; align-items: center; gap: 4px; margin-top: 10px;
+               font-size: 12px; justify-content: flex-end; }
+.heat-swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+.chart-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch;
+              margin: 0 calc(var(--gap) * -1); padding: 0 var(--gap); }
+
+/* Sparklines in the metric tiles follow the same mark rules as the full charts:
+   rounded data-end, square baseline, separated by a gap in the surface. */
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 30px; margin-top: 10px; }
+.bar { flex: 1; background: var(--accent); min-height: 2px; opacity: .8;
+       border-radius: 4px 4px 0 0; }
+
+/* === YEAR IN REVIEW ============================================================ */
+.year-nav { display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: var(--gap); }
+/* The hero figure uses proportional numerals, not tabular: at display sizes
+   tabular-nums gives every digit the width of a zero and the number reads loose. */
+.year-title { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.03em; }
+
+.hero-card { text-align: center; }
+.hero-figure { font-size: 56px; font-weight: 700; line-height: 1;
+               letter-spacing: -0.04em; color: var(--accent); }
+.hero-label { font-size: 14px; color: var(--text-dim); margin-top: 6px; }
+.hero-card p { margin-top: 12px; }
+
+.total-card .total-value { font-size: 32px; font-weight: 650; margin-top: 6px;
+                           letter-spacing: -0.03em; }
+/* The comparison is the point of the card, so it sits directly under the number
+   rather than being tucked into the facts list. */
+.equivalence { margin: 4px 0 0; font-size: 15px; color: var(--text-dim); }
+.total-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+               gap: 8px 16px; margin-top: 14px; padding-top: 14px;
+               border-top: 1px solid var(--border); }
+.total-facts > div { display: flex; flex-direction: column; gap: 2px; }
+.fact-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+              color: var(--text-dim); }
+.fact-value { font-size: 14px; font-variant-numeric: tabular-nums; }
+.months { margin-top: 14px; min-width: 320px; }
