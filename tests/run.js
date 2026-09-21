@@ -618,8 +618,10 @@ function fitbitParseTests() {
     // read as a resting-heart-rate file and vice versa.
     eq('resting heart rate is not plain heart rate',
        app.classifyFitbitFile('Global Export Data/resting_heart_rate-2026-07-01.json'), 'resting_hr');
-    eq('per-second heart rate is skipped on purpose',
-       app.classifyFitbitFile('Global Export Data/heart_rate-2026-07-01.json'), 'ignore');
+    eq('raw heart rate is read, for the bands',
+       app.classifyFitbitFile('Global Export Data/heart_rate-2026-07-01.json'), 'heart_rate');
+    eq('distance is skipped — it already arrives on the exercise records',
+       app.classifyFitbitFile('Global Export Data/distance-2026-07-01.json'), 'ignore');
     eq('non-JSON is not classified', app.classifyFitbitFile('Your Profile/Profile.csv'), null);
   });
 
@@ -676,6 +678,48 @@ function fitbitParseTests() {
        res.sessions.find(s => s.rawActivity === 'Tennis').activity, 'racket');
     eq('a workout without a distance keeps null rather than zero',
        res.sessions.find(s => s.rawActivity === 'Tennis').distanceM, null);
+  });
+
+  suite('Fitbit heart rate', () => {
+    const out = app.createFitbitCollector('b', 1);
+    // Readings at 07:00:00, 07:00:30, 07:02:30 and then an hour later. Each reading
+    // is worth the gap to the next: 30s at 150, 120s at 165, and the 57-minute gap
+    // capped at five minutes at 175. The last reading has no successor.
+    app.parseFitbitHeartRate([
+      { dateTime: '07/04/26 07:00:00', value: { bpm: 150, confidence: 2 } },
+      { dateTime: '07/04/26 07:00:30', value: { bpm: 165, confidence: 3 } },
+      { dateTime: '07/04/26 07:02:30', value: { bpm: 175, confidence: 3 } },
+      { dateTime: '07/04/26 08:00:00', value: { bpm: 80, confidence: 2 } }
+    ], out);
+    const res = out.finish();
+    const band = f => res.daily.find(d => d.metric === 'hr_band_' + f);
+    eq('the 140 band gets the first gap', band(140).value, 30);
+    eq('the 160 band gets the second and the capped one', band(160).value, 120 + 300);
+    eq('the final reading contributes nothing', band(0), undefined);
+    eq('and it is attributed to Fitbit', app.sourceLabel(band(140).source), 'Fitbit');
+
+    // A plain numeric value, as some export vintages write it.
+    const plain = app.createFitbitCollector('b', 1);
+    app.parseFitbitHeartRate([
+      { dateTime: '07/04/26 07:00:00', value: 150 },
+      { dateTime: '07/04/26 07:01:00', value: 150 }
+    ], plain);
+    eq('a bare numeric reading works too',
+       plain.finish().daily.find(d => d.metric === 'hr_band_140').value, 60);
+  });
+
+  suite('Fitbit file classification, revisited', () => {
+    // The specific pattern must still beat the broad one now that plain heart rate
+    // is parsed rather than skipped.
+    eq('resting heart rate is still its own thing',
+       app.classifyFitbitFile('Global Export Data/resting_heart_rate-2026-07-01.json'),
+       'resting_hr');
+    eq('raw heart rate is now read',
+       app.classifyFitbitFile('Global Export Data/heart_rate-2026-07-01.json'), 'heart_rate');
+    eq("Fitbit's own zone banding is still skipped, since its boundaries are " +
+       'percentages of an unstated max',
+       app.classifyFitbitFile('Global Export Data/time_in_heart_rate_zones-2026-07-01.json'),
+       'ignore');
   });
 
   suite('Fitbit weight — never guess the unit', () => {
@@ -739,8 +783,10 @@ async function fitbitImportTests() {
     close('weight uses the unit from the profile', day('weight').value, 84.0, 0.1);
     eq('the profile unit is reported', res.meta.weightUnit, 'lb');
 
-    ok('per-second heart rate is never read',
-       !res.daily.some(d => d.metric === 'heart_rate'));
+    // A single reading in the file has no successor, so it contributes no span —
+    // the file is read, but one sample cannot imply a duration.
+    ok('a lone heart-rate reading yields no band',
+       !res.daily.some(d => d.metric.startsWith('hr_band_')));
     eq('one bad file is skipped, not fatal', res.meta.filesFailed, 1);
     ok('and the rest still imported', res.sessions.length === 1 && day('steps') != null);
 

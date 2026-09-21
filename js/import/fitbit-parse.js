@@ -52,13 +52,17 @@ function parseFitbitDate(str) {
 // before the far broader `heart_rate-`.
 const FITBIT_FILE_KINDS = [
   { kind: 'resting_hr', re: /(^|\/)resting_heart_rate[-_]/i },
+  { kind: 'heart_rate', re: /(^|\/)heart_rate[-_]/i },
   { kind: 'steps',      re: /(^|\/)steps[-_]/i },
   { kind: 'sleep',      re: /(^|\/)sleep[-_]/i },
   { kind: 'exercise',   re: /(^|\/)(exercise|activities)[-_]/i },
   { kind: 'weight',     re: /(^|\/)weight[-_]/i },
-  // Deliberately ignored: per-second heart rate and similar run to hundreds of
-  // megabytes and feed nothing this app shows.
-  { kind: 'ignore',     re: /(^|\/)(heart_rate|altitude|calories|distance|swim_lengths|estimated_oxygen|time_in_heart_rate_zones)[-_]/i }
+  // Deliberately ignored: these are large and feed nothing the app shows. Distance
+  // and calories arrive on the exercise records already; altitude and SpO2 have no
+  // home here. time_in_heart_rate_zones is Fitbit's own banding, but its boundaries
+  // are percentages of a max heart rate the export does not state, so it cannot be
+  // placed on an absolute bpm scale — the raw samples above can.
+  { kind: 'ignore',     re: /(^|\/)(altitude|calories|distance|swim_lengths|estimated_oxygen|time_in_heart_rate_zones|steps_intraday)[-_]/i }
 ];
 
 function classifyFitbitFile(name) {
@@ -159,9 +163,38 @@ function parseFitbitExercise(data, out) {
   }
 }
 
+// Fitbit records heart rate as instants a few seconds apart, exactly as Apple does,
+// so the time attributed to a reading is the gap to the next one — capped, because a
+// long gap means the band was off a wrist rather than a long slow heartbeat.
+//
+// This runs per file, and Fitbit writes one file per day, so the reading that ends a
+// file has no successor and contributes nothing. At five-second sampling that loses
+// a few seconds a day, which is not worth carrying state between files to recover.
+const FITBIT_HR_GAP_CAP_MS = 5 * 60 * 1000;
+
+function parseFitbitHeartRate(data, out) {
+  let previous = null;
+  for (const row of asArray(data)) {
+    const when = parseFitbitDate(row.dateTime || row.date);
+    if (!when) continue;
+    const bpm = Number(row.value && typeof row.value === 'object' ? row.value.bpm : row.value);
+    if (!isFinite(bpm) || bpm <= 0) { previous = null; continue; }
+
+    if (previous) {
+      const gap = when.ms - previous.ms;
+      if (gap > 0) {
+        out.addDaily(hrBandMetric(hrBandFor(previous.bpm)), previous.localDate,
+                     Math.min(gap, FITBIT_HR_GAP_CAP_MS) / 1000, 'sum', previous.ms);
+      }
+    }
+    previous = { ms: when.ms, bpm, localDate: when.localDate };
+  }
+}
+
 const FITBIT_PARSERS = {
   steps: parseFitbitSteps,
   resting_hr: parseFitbitRestingHr,
+  heart_rate: parseFitbitHeartRate,
   sleep: parseFitbitSleep,
   exercise: parseFitbitExercise
 };
@@ -184,5 +217,5 @@ function fitbitWeightUnit(profileCsvText) {
 if (typeof module !== 'undefined') {
   module.exports = { parseFitbitDate, classifyFitbitFile, parseFitbitSteps,
                      parseFitbitRestingHr, parseFitbitSleep, parseFitbitWeight,
-                     parseFitbitExercise, fitbitWeightUnit };
+                     parseFitbitExercise, parseFitbitHeartRate, fitbitWeightUnit };
 }

@@ -104,7 +104,7 @@ function truncateValues(obj) {
 // the report cannot promise something the import then ignores.
 const FITBIT_KIND_METRIC = {
   steps: 'steps', resting_hr: 'resting_hr', sleep: 'sleep',
-  weight: 'weight', exercise: 'workouts'
+  weight: 'weight', exercise: 'workouts', heart_rate: 'heart-rate bands'
 };
 
 function folderMetric(folder) {

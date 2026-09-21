@@ -75,7 +75,7 @@ function loadApp() {
       isTakeoutArchive, takeoutFolders, inspectTakeout, describeSample, importTakeout,
       parseFitbitDate, classifyFitbitFile, fitbitWeightUnit,
       parseFitbitSteps, parseFitbitSleep, parseFitbitExercise, parseFitbitRestingHr,
-      parseFitbitWeight, createFitbitCollector, DailyBuckets,
+      parseFitbitWeight, parseFitbitHeartRate, createFitbitCollector, DailyBuckets,
       inspectFile, inspectionReportText,
       // dedupe + rollups (present from phase 3 onward)
       dedupeSessions, applySessionDecisions,
