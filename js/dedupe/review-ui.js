@@ -26,6 +26,7 @@ function renderReview(host) {
 
       if (!sessionGroups.length && !dailyGroups.length) {
         host.innerHTML = `
+          <button class="btn-link back-link" onclick="navigate('data')">‹ Data</button>
           <div class="view-head"><h1>Duplicates</h1></div>
           <div class="card empty-state">
             <div class="empty-icon" aria-hidden="true">✨</div>
@@ -37,6 +38,7 @@ function renderReview(host) {
       }
 
       host.innerHTML = `
+        <button class="btn-link back-link" onclick="navigate('data')">‹ Data</button>
         <div class="view-head">
           <h1>Duplicates</h1>
           <p class="subtle">${plural(suppressedSessions, 'workout')} and
@@ -187,4 +189,8 @@ function wireReviewActions() {
   if (more) more.onclick = () => { _reviewShown += REVIEW_PAGE; refreshView(); };
 }
 
-registerView({ id: 'duplicates', label: 'Duplicates', icon: '🔀', render: renderReview });
+// Reconciliation is plumbing, not a headline feature — it earns a permanent tab about
+// as much as a database migration would. It lives one tap deep, reached from the Data
+// screen, which is where questions about data quality actually arise.
+registerView({ id: 'duplicates', label: 'Duplicates', icon: '🔀',
+               inNav: false, render: renderReview });

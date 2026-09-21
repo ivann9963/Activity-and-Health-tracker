@@ -228,7 +228,7 @@ pre.scroll { max-height: 260px; overflow-y: auto; }
 
 .period-nav { display: flex; align-items: center; justify-content: space-between;
               margin-bottom: var(--gap); }
-.period-label { font-size: 17px; font-weight: 600; }
+.period-label { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .icon-btn {
   width: 38px; height: 38px; border-radius: 50%;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
@@ -294,3 +294,11 @@ pre.scroll { max-height: 260px; overflow-y: auto; }
 .sample-keys { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
 .sample-keys code { font-size: 11px; }
 .sample pre { font-size: 11px; max-height: 200px; overflow: auto; }
+
+/* --- text links, toggles, back navigation ------------------------------------- */
+.btn-link { background: none; border: none; color: var(--accent); font-family: inherit;
+            font-size: 14px; cursor: pointer; padding: 6px 0; }
+.customise-row { text-align: center; margin: -4px 0 var(--gap); }
+.back-link { margin-bottom: 6px; }
+.toggle-field span { display: flex; align-items: center; gap: 8px; }
+.toggle-field input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); }

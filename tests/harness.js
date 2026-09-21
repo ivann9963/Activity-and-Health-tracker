@@ -53,7 +53,7 @@ function loadApp() {
       startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear,
       periodBounds, shiftPeriod,
       // metrics
-      METRICS, METRIC_ORDER, aggregate, formatMetric,
+      METRICS, METRIC_ORDER, metricIds, visibleMetricIds, aggregate, formatMetric,
       // taxonomy
       ACTIVITIES, canonicalActivity, activitiesCompatible,
       // records
@@ -72,6 +72,7 @@ function loadApp() {
       electDailySources, applyDailyDecisions,
       sessionsOverlap, overlapRatio, sourceRank, pickWinner, richness,
       PARTIAL_WEAR_RATIO,
+      computeRollups,
       DEFAULT_SETTINGS
     };`, sandbox, { filename: 'app-bundle.js' });
 

@@ -25,10 +25,12 @@ function renderDashboard(host) {
       const prevAnchor = shiftPeriod(anchor, _period, -1, firstDay);
       const prev = periodBounds(prevAnchor, _period, firstDay);
 
+      const shown = visibleMetricIds(settings);
+
       return Promise.all([
-        rollupAllMetrics(now.from, now.to),
-        rollupAllMetrics(prev.from, prev.to),
-        bounds.from ? rollupAllMetrics(bounds.from, bounds.to || todayLocal()) : null
+        rollupAllMetrics(now.from, now.to, shown),
+        rollupAllMetrics(prev.from, prev.to, shown),
+        bounds.from ? rollupAllMetrics(bounds.from, bounds.to || todayLocal(), shown) : null
       ]).then(([current, previous, allTime]) => {
         host.innerHTML = `
           <div class="segmented" role="tablist">
@@ -39,16 +41,20 @@ function renderDashboard(host) {
 
           <div class="period-nav">
             <button class="icon-btn" id="prev-period" aria-label="Previous ${_period}">‹</button>
-            <div class="period-label">${escHtml(periodLabel(now, _period, firstDay))}</div>
+            <h1 class="period-label">${escHtml(periodLabel(now, _period, firstDay))}</h1>
             <button class="icon-btn" id="next-period" aria-label="Next ${_period}"
                     ${isCurrentPeriod(now, firstDay) ? 'disabled' : ''}>›</button>
           </div>
 
           <div class="metric-grid">
-            ${metricIds().map(id => metricTileHtml(id, current[id], previous[id], now)).join('')}
+            ${shown.map(id => metricTileHtml(id, current[id], previous[id], now)).join('')}
           </div>
 
-          ${allTime ? allTimeHtml(allTime, bounds) : ''}`;
+          <div class="customise-row">
+            <button class="btn-link" onclick="navigate('settings')">Choose which tiles to show</button>
+          </div>
+
+          ${allTime ? allTimeHtml(allTime, bounds, shown) : ''}`;
 
         host.querySelectorAll('[data-period]').forEach(b => b.onclick = () => {
           _period = b.dataset.period; _anchor = null; refreshView();
@@ -146,8 +152,8 @@ function monthlySeries(byDay, bounds) {
 }
 
 // The number no other app will show you: everything, since your data begins.
-function allTimeHtml(allTime, bounds) {
-  const totals = metricIds()
+function allTimeHtml(allTime, bounds, shown) {
+  const totals = shown
     .filter(id => METRICS[id].kind === 'total')
     .map(id => ({ id, value: allTime[id] && allTime[id].value }))
     .filter(t => t.value);

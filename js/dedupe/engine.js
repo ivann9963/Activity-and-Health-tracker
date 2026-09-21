@@ -20,15 +20,21 @@ function runDedupe() {
     const sessionChanges = applySessionDecisions(dedupeSessions(sessions, settings, overrides));
     const dailyChanges = applyDailyDecisions(electDailySources(daily, settings, overrides));
 
-    return Promise.all([
-      dbPutMany('sessions', sessionChanges),
-      dbPutMany('daily', dailyChanges)
-    ]).then(() => ({
+    const summary = {
       sessionsChanged: sessionChanges.length,
       dailyChanged: dailyChanges.length,
       sessionsSuppressed: sessions.filter(s => s.supersededBy).length,
-      dailySuppressed: daily.filter(d => d.supersededBy).length
-    }));
+      dailySuppressed: daily.filter(d => d.supersededBy).length,
+      sessionGroups: new Set(sessions.filter(s => s.dedupe && s.dedupe.groupId)
+                                     .map(s => s.dedupe.groupId)).size,
+      manualOverrides: overrideRows.length,
+      at: Date.now()
+    };
+
+    return Promise.all([
+      dbPutMany('sessions', sessionChanges),
+      dbPutMany('daily', dailyChanges)
+    ]).then(() => setSetting('dedupeSummary', summary)).then(() => summary);
   });
 }
 

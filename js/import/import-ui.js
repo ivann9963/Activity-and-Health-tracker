@@ -8,7 +8,8 @@ let _inspectedFile = null; // the File the report describes, so Import needs no 
 let _busy = false;
 
 function renderDataView(host) {
-  return dbGetAll('imports').then(imports => {
+  return Promise.all([dbGetAll('imports'), getSetting('dedupeSummary', null)])
+    .then(([imports, dedupe]) => {
     imports.sort((a, b) => b.importedAt - a.importedAt);
     host.innerHTML = `
       <div class="view-head">
@@ -29,6 +30,7 @@ function renderDataView(host) {
       </div>
 
       <div id="inspection-result"></div>
+      ${reconciliationHtml(dedupe)}
       ${importHistoryHtml(imports)}
       ${exportHelpHtml()}`;
 
@@ -208,6 +210,23 @@ function startImport(file) {
       if (btn) { btn.disabled = false; btn.textContent = 'Import this file'; }
     })
     .finally(() => { _busy = false; });
+}
+
+// Reconciliation is worth surfacing — the totals depend on it — but it is a property
+// of the data, not a place you visit, so it reports here and links one tap deeper.
+function reconciliationHtml(d) {
+  if (!d || (!d.sessionsSuppressed && !d.dailySuppressed)) return '';
+  return `<div class="card">
+    <h2>Reconciliation</h2>
+    <p class="subtle">${plural(d.sessionsSuppressed, 'workout')} and
+       ${plural(d.dailySuppressed, 'daily figure')} are set aside so nothing is counted
+       twice. Nothing was deleted${d.manualOverrides
+         ? `, and ${plural(d.manualOverrides, 'decision')} ${d.manualOverrides === 1 ? 'is' : 'are'} yours`
+         : ''}.</p>
+    <div class="card-actions">
+      <button class="btn btn-ghost" onclick="navigate('duplicates')">Review the decisions</button>
+    </div>
+  </div>`;
 }
 
 function importHistoryHtml(imports) {

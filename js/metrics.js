@@ -62,6 +62,12 @@ const METRIC_ORDER = ['distance_run', 'time_gym', 'distance_swim', 'steps',
 
 function metricIds() { return METRIC_ORDER.filter(id => METRICS[id]); }
 
+// The metrics the dashboard should actually render, in display order.
+function visibleMetricIds(settings) {
+  const hidden = new Set((settings && settings.hiddenMetrics) || []);
+  return metricIds().filter(id => !hidden.has(id));
+}
+
 // Combine a list of numbers according to an aggregation name. Returns null for an
 // empty list rather than 0, so "no data" and "genuinely zero" stay distinguishable —
 // a day with no weight reading must not plot as 0 kg.
@@ -99,5 +105,6 @@ function formatMetric(metricId, value, opts) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { METRICS, METRIC_ORDER, metricIds, aggregate, formatMetric };
+  module.exports = { METRICS, METRIC_ORDER, metricIds, visibleMetricIds,
+                     aggregate, formatMetric };
 }

@@ -32,6 +32,9 @@ const DEFAULT_SOURCE_PRIORITY = {
 
 const DEFAULT_SETTINGS = {
   units: 'metric',          // 'metric' | 'imperial'
+  // Metric ids the dashboard should not show. Not everyone does every sport, and a
+  // permanently empty tile is worse than no tile — it reads as missing data.
+  hiddenMetrics: [],
   firstDayOfWeek: 'monday', // matches the sibling finance app's default
   theme: 'dark',
   sourcePriority: { ...DEFAULT_SOURCE_PRIORITY },

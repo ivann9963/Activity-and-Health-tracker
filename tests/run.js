@@ -442,6 +442,57 @@ async function zipTests() {
   eq('a Strava CSV inspects to an activity count', stravaReport.totals.workouts, 1);
 }
 
+// --- visibility and rollups -------------------------------------------------------
+function rollupTests() {
+  suite('tile visibility', () => {
+    eq('everything shows by default', app.visibleMetricIds({}).length, app.metricIds().length);
+    const hidden = app.visibleMetricIds({ hiddenMetrics: ['distance_cycle', 'weight'] });
+    ok('hidden metrics drop out',
+       !hidden.includes('distance_cycle') && !hidden.includes('weight'));
+    ok('the rest keep their order', hidden.includes('distance_run') && hidden.includes('steps'));
+    eq('hiding everything is allowed',
+       app.visibleMetricIds({ hiddenMetrics: app.metricIds() }).length, 0);
+  });
+
+  suite('rollups', () => {
+    const sessions = [
+      { localDate: '2024-03-12', activity: 'running', distanceM: 6200, durationSec: 1950 },
+      { localDate: '2024-03-12', activity: 'running', distanceM: 3000, durationSec: 900 },
+      { localDate: '2024-03-14', activity: 'racket', durationSec: 5400 },
+      // Suppressed by dedupe: must not reach any total.
+      { localDate: '2024-03-12', activity: 'running', distanceM: 6180, supersededBy: 'x' },
+      // Outside the range asked for.
+      { localDate: '2024-04-01', activity: 'running', distanceM: 9999 }
+    ];
+    const daily = [
+      { localDate: '2024-03-12', metric: 'steps', value: 2600 },
+      { localDate: '2024-03-13', metric: 'steps', value: 4000 },
+      { localDate: '2024-03-12', metric: 'steps', value: 2000, supersededBy: 'y' },
+      { localDate: '2024-03-12', metric: 'weight', value: 82.2 },
+      { localDate: '2024-03-14', metric: 'weight', value: 81.8 }
+    ];
+    const r = app.computeRollups(sessions, daily, '2024-03-11', '2024-03-17',
+                                 ['distance_run', 'time_racket', 'steps', 'weight']);
+
+    eq('two runs on one day are summed', r.distance_run.byDay['2024-03-12'], 9200);
+    eq('a superseded run is never counted', r.distance_run.value, 9200);
+    eq('records outside the range are excluded',
+       r.distance_run.byDay['2024-04-01'], undefined);
+    eq('active days count only days with something', r.distance_run.activeDays, 1);
+    eq('duration metrics come from the same pass', r.time_racket.value, 5400);
+
+    eq('steps sum across the period', r.steps.value, 6600);
+    eq('a superseded day is not added on top', r.steps.byDay['2024-03-12'], 2600);
+
+    // A trend metric averages across the period rather than summing: nobody weighs
+    // 164kg because they stood on the scales twice.
+    close('weight averages', r.weight.value, 82.0, 0.001);
+
+    const only = app.computeRollups(sessions, daily, '2024-03-11', '2024-03-17', ['steps']);
+    eq('asking for one metric computes only that one', Object.keys(only), ['steps']);
+  });
+}
+
 // --- Google Health / Fitbit Takeout ---------------------------------------------------
 async function takeoutTests() {
   // Shaped like a real export: Takeout/Fitbit/<folder>/<name>-YYYY-MM-DD.json.
@@ -513,6 +564,7 @@ async function takeoutTests() {
   try {
     await appleTests();
     fixtureDedupeTests();
+    rollupTests();
     await zipTests();
     await takeoutTests();
   } catch (err) {

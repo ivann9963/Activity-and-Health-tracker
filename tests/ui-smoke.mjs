@@ -47,7 +47,9 @@ try {
   await page.goto(base, { waitUntil: 'networkidle' });
 
   const tabs = await page.locator('.nav-btn').allTextContents();
-  check('the tab bar is built from the view registry', tabs.length === 4, `got ${JSON.stringify(tabs)}`);
+  check('the tab bar carries only the three primary screens', tabs.length === 3,
+    `got ${JSON.stringify(tabs)}`);
+  check('reconciliation is not one of them', !tabs.join(' ').includes('Duplicates'));
   check('the empty state invites an import',
     await page.locator('.empty-state').isVisible());
 
@@ -84,7 +86,10 @@ try {
   await page.locator('.segmented button:has-text("Year")').click();
   await page.waitForSelector('.metric-grid');
 
-  await page.locator('.nav-btn:has-text("Duplicates")').click();
+  await page.locator('.nav-btn:has-text("Data")').click();
+  await page.waitForSelector('button:has-text("Review the decisions")', { timeout: 10000 });
+  check('the Data screen reports what reconciliation did', true);
+  await page.locator('button:has-text("Review the decisions")').click();
   await page.waitForSelector('.dup-group', { timeout: 10000 });
   const dups = await page.locator('#view-host').innerText();
   check('the duplicated run is surfaced for review', /Running/.test(dups));
@@ -102,9 +107,18 @@ try {
   check('settings shows the source ranking',
     (await page.locator('.rank-input').count()) >= 5);
 
+  // Hiding a tile must actually remove it from the dashboard.
+  const toggles = page.locator('.metric-toggle');
+  check('every metric has a visibility toggle',
+    (await toggles.count()) >= 8, `got ${await toggles.count()}`);
+  await page.locator('.metric-toggle[data-metric="distance_cycle"]').uncheck();
   await page.locator('.nav-btn:has-text("Home")').click();
-  await page.waitForSelector('.view-head h1');
-  check('navigation returns home', (await page.locator('.view-head h1').innerText()).length > 0);
+  await page.waitForSelector('.metric-grid');
+  const grid = await page.locator('.metric-grid').innerText();
+  check('a hidden tile disappears from the dashboard', !/CYCLING/i.test(grid), grid.slice(0, 200));
+
+  check('the dashboard has a heading of its own',
+    (await page.locator('h1.period-label').innerText()).length > 0);
 
   check('no console errors anywhere in that run', errors.length === 0, errors.join('\n    '));
 } catch (err) {
