@@ -1,17 +1,27 @@
-# Cloudflare Pages project configuration.
+# Cloudflare Worker configuration.
 #
-# The site is static and lives in _site/ after `npm run build`. The functions/
-# directory is picked up automatically by Pages and deployed as Pages Functions —
-# that is where the OAuth token broker lives, because the Google Health API issues a
-# client secret and a static page cannot hold one.
+# This is a Worker with static assets rather than a Pages project: Cloudflare's
+# current dashboard creates Workers, and Pages is no longer the path new projects
+# are steered down. The practical difference is that routing is explicit —
+# worker.js decides what is an API call and what is a file — instead of being
+# inferred from a functions/ directory.
 #
-# Two secrets must be set in the Cloudflare dashboard (Settings → Environment
-# variables → add as "Secret", not plaintext):
+# Build command in the dashboard:   npm run build
+# Deploy command in the dashboard:  npx wrangler deploy
+#
+# Two secrets must be set on the Worker (Settings → Variables and Secrets, added as
+# "Secret" rather than plaintext):
 #   GOOGLE_CLIENT_ID
 #   GOOGLE_CLIENT_SECRET
-#
 # They are never committed and never reach the browser.
 
-name = "activity-ledger"
+name = "activity-and-health-tracker"
+main = "worker.js"
 compatibility_date = "2026-09-01"
-pages_build_output_dir = "_site"
+
+[assets]
+# `npm run build` writes here. Requests that match a file are served directly and
+# never reach the Worker; anything else — /api/... — falls through to it. That is the
+# default behaviour, so no extra routing rules are needed.
+directory = "_site"
+binding = "ASSETS"
