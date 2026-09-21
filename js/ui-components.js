@@ -11,9 +11,15 @@ function escHtml(s) {
 
 function el(id) { return document.getElementById(id); }
 
+// At most this many on screen at once. Several actions in quick succession — two
+// imports and a saved goal — otherwise stack into a wall that covers the content the
+// toasts are reporting on.
+const MAX_TOASTS = 2;
+
 function showToast(msg, kind) {
   const host = el('toast-host');
   if (!host) return;
+  while (host.children.length >= MAX_TOASTS) host.firstElementChild.remove();
   const node = document.createElement('div');
   node.className = 'toast toast-' + (kind || 'info');
   node.textContent = msg;
