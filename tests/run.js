@@ -166,8 +166,11 @@ async function parseFixture(chunkSize) {
   return app.scanAppleExport(stream, { importBatch: 'test' });
 }
 
+let fixtureResult = null;
+
 async function appleTests() {
   const res = await parseFixture(1 << 20); // one chunk
+  fixtureResult = res;
   suite('Apple Health parser', () => {
     eq('every Record element is counted', res.tally.records, 17);
     eq('every Workout element is counted', res.tally.workouts, 6);
@@ -236,6 +239,158 @@ async function appleTests() {
   });
 }
 
+
+// --- deduplication -------------------------------------------------------------------
+function session(over) {
+  const base = { activity: 'running', start: Date.parse('2024-03-12T16:00:00Z'),
+                 end: Date.parse('2024-03-12T16:32:30Z'), tzOffset: 120, distanceM: 6200,
+                 source: { vendor: 'apple', app: 'Apple Health', device: 'Apple Watch' } };
+  return app.makeSession({ ...base, ...over,
+    source: { ...base.source, ...(over && over.source || {}) } });
+}
+function daily(metric, date, device, value) {
+  return app.makeDaily({ metric, localDate: date, value,
+    source: { vendor: 'apple', app: 'Apple Health', device } });
+}
+const settings = app.DEFAULT_SETTINGS;
+const counted = decisions => decisions.filter(d => !d.supersededBy).map(d => d.record);
+
+suite('session dedupe — the same run seen twice', () => {
+  const watch = session({});
+  const strava = session({ source: { device: 'Strava' },
+    start: Date.parse('2024-03-12T16:00:35Z'), end: Date.parse('2024-03-12T16:32:59Z'),
+    distanceM: 6180 });
+  const d = app.dedupeSessions([watch, strava], settings, {});
+  eq('one of the two copies is counted', counted(d).length, 1);
+  eq('the higher-ranked source wins', app.sourceLabel(counted(d)[0].source), 'Apple Watch');
+  ok('the loser records why it was set aside',
+     /same workout/.test(d.find(x => x.supersededBy).reason));
+
+  // The hazard case: a long walk that wholly CONTAINS a short run overlaps it by 100%
+  // of the shorter session, but they are two different things.
+  const walk = session({ activity: 'walking', source: { device: 'iPhone' },
+    start: Date.parse('2024-03-12T15:00:00Z'), end: Date.parse('2024-03-12T17:00:00Z'),
+    distanceM: 9000 });
+  const both = app.dedupeSessions([walk, session({})], settings, {});
+  eq('a run inside a longer walk is not swallowed by it', counted(both).length, 2);
+
+  const morning = session({ start: Date.parse('2024-03-12T06:00:00Z'),
+                            end: Date.parse('2024-03-12T06:30:00Z') });
+  eq('two separate runs on one day both count',
+     counted(app.dedupeSessions([session({}), morning], settings, {})).length, 2);
+
+  eq('a run and a swim are never the same event',
+     counted(app.dedupeSessions([session({}),
+       session({ activity: 'swimming', source: { device: 'Strava' } })], settings, {})).length, 2);
+});
+
+suite('session dedupe — tie-breaking and overrides', () => {
+  const rich = session({ source: { device: 'Strava' }, avgHr: 156, energyKcal: 410 });
+  const bare = session({ source: { device: 'Strava' }, distanceM: null, avgHr: null,
+                         start: Date.parse('2024-03-12T16:00:10Z') });
+  const d = app.dedupeSessions([bare, rich], settings, {});
+  eq('between equal sources the fuller record wins', counted(d)[0].id, rich.id);
+
+  const watch = session({});
+  const strava = session({ source: { device: 'Strava' },
+    start: Date.parse('2024-03-12T16:00:35Z') });
+  const forced = app.dedupeSessions([watch, strava], settings,
+    { [strava.id]: { decision: 'keep' }, [watch.id]: { decision: 'suppress', winner: strava.id } });
+  eq('a manual choice overrules the ranking', counted(forced).map(r => r.id), [strava.id]);
+});
+
+suite('stream election — steps are never summed across devices', () => {
+  const watch = daily('steps', '2024-03-12', 'Apple Watch', 2600);
+  const phone = daily('steps', '2024-03-12', 'iPhone', 2000);
+  const d = app.electDailySources([watch, phone], settings, {});
+  eq('exactly one source counts for the day', counted(d).length, 1);
+  eq('the wrist beats the pocket', app.sourceLabel(counted(d)[0].source), 'Apple Watch');
+
+  // A watch left on the charger reports a small number, not no number. Trusting the
+  // ranking blindly here would throw away 9,000 real steps.
+  const unworn = daily('steps', '2024-03-13', 'Apple Watch', 200);
+  const carried = daily('steps', '2024-03-13', 'iPhone', 9000);
+  const d2 = app.electDailySources([unworn, carried], settings, {});
+  eq('a device that was clearly not worn loses to one that was',
+     app.sourceLabel(counted(d2)[0].source), 'iPhone');
+  ok('and it says so', /not worn all day/.test(counted(d2)[0] && d2.find(x => !x.supersededBy).reason));
+
+  const zero = daily('steps', '2024-03-14', 'Apple Watch', 0);
+  const some = daily('steps', '2024-03-14', 'iPhone', 4000);
+  eq('a source that recorded nothing never wins',
+     app.sourceLabel(counted(app.electDailySources([zero, some], settings, {}))[0].source), 'iPhone');
+});
+
+suite('stream election — retiring a device leaves no cliff', () => {
+  // The switch from an Apple Watch to a Fitbit is the regression this exists to stop:
+  // a global "Apple Watch wins" rule would elect a source with no data from July on.
+  const records = [];
+  for (const date of ['2026-06-28', '2026-06-29', '2026-06-30']) {
+    records.push(daily('steps', date, 'Apple Watch', 11000));
+    records.push(daily('steps', date, 'iPhone', 7000));
+  }
+  for (const date of ['2026-07-01', '2026-07-02', '2026-07-03']) {
+    records.push(daily('steps', date, 'Google Health', 10500)); // the Fitbit, relayed
+    records.push(daily('steps', date, 'iPhone', 6800));
+  }
+  const kept = counted(app.electDailySources(records, settings, {}));
+  eq('every day still elects exactly one source', kept.length, 6);
+  const byDate = Object.fromEntries(kept.map(r => [r.localDate, r.value]));
+  eq('the watch era counts the watch', byDate['2026-06-29'], 11000);
+  eq('the fitbit era counts the fitbit', byDate['2026-07-02'], 10500);
+  ok('no day collapses to the phone-only figure',
+     Object.values(byDate).every(v => v >= 10000), JSON.stringify(byDate));
+});
+
+suite('stream election — trend metrics are not "bigger is better"', () => {
+  // A higher resting heart rate is not a more trustworthy one, so the partial-wear
+  // guard must not apply here.
+  const watch = daily('resting_hr', '2024-03-12', 'Apple Watch', 54);
+  const phone = daily('resting_hr', '2024-03-12', 'iPhone', 99);
+  eq('the ranking stands regardless of magnitude',
+     app.sourceLabel(counted(app.electDailySources([watch, phone], settings, {}))[0].source),
+     'Apple Watch');
+
+  const scale = daily('weight', '2024-03-12', 'Withings', 82.2);
+  const manual = daily('weight', '2024-03-12', 'iPhone', 120);
+  eq('one weight per day', counted(app.electDailySources([scale, manual], settings, {})).length, 1);
+});
+
+suite('dedupe is idempotent', () => {
+  const recs = [session({}), session({ source: { device: 'Strava' },
+    start: Date.parse('2024-03-12T16:00:35Z') })];
+  const first = app.applySessionDecisions(app.dedupeSessions(recs, settings, {}));
+  eq('the first pass changes something', first.length > 0, true);
+  const second = app.applySessionDecisions(app.dedupeSessions(recs, settings, {}));
+  eq('running it again changes nothing', second.length, 0);
+
+  const days = [daily('steps', '2024-03-12', 'Apple Watch', 2600),
+                daily('steps', '2024-03-12', 'iPhone', 2000)];
+  app.applyDailyDecisions(app.electDailySources(days, settings, {}));
+  eq('same for the daily election',
+     app.applyDailyDecisions(app.electDailySources(days, settings, {})).length, 0);
+});
+
+function fixtureDedupeTests() { suite('dedupe over the real fixture', () => {
+  const parsed = fixtureResult;
+  const d = app.dedupeSessions(parsed.sessions, settings, {});
+  const kept = counted(d);
+  // The fixture holds the same 2024-03-12 run twice: once from the watch, once relayed
+  // from Strava. Everything else is distinct.
+  eq('six workouts become five once the duplicate is set aside', kept.length, 5);
+  eq('the Apple Watch copy is the one that counts',
+     app.sourceLabel(kept.find(s => s.localDate === '2024-03-12').source), 'Apple Watch');
+
+  const dd = app.electDailySources(parsed.daily, settings, {});
+  const keptDaily = counted(dd);
+  const steps = keptDaily.filter(r => r.metric === 'steps');
+  eq('two step-days survive from four records', steps.length, 2);
+  eq('2024-03-12 counts the watch',
+     steps.find(s => s.localDate === '2024-03-12').value, 2600);
+  eq('2026-07-04 counts Google Health, not the phone',
+     steps.find(s => s.localDate === '2026-07-04').value, 9400);
+}); }
+
 // --- ZIP + sniffing + inspection ------------------------------------------------------
 async function zipTests() {
   const zip = namedBlob(await makeZip({
@@ -291,6 +446,7 @@ async function zipTests() {
 (async () => {
   try {
     await appleTests();
+    fixtureDedupeTests();
     await zipTests();
   } catch (err) {
     failed++;

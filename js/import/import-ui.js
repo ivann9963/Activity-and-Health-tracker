@@ -1,37 +1,41 @@
 // === THE DATA SCREEN ===
-// Where files come in. For now it inspects: drop an export here and it reports what
-// is actually inside, without writing anything. That matters because nobody — not
-// even the person whose data it is — reliably knows what an Apple or Strava export
-// contains until they look.
+// Where files come in. Inspect first, import second: the report shows what is actually
+// inside a file before anything is written, because nobody — not even the person whose
+// data it is — reliably knows what their own health export contains until they look.
 
-let _inspection = null;   // the most recent report, kept so the view can re-render
+let _inspection = null;    // most recent report, kept so the view survives a re-render
+let _inspectedFile = null; // the File the report describes, so Import needs no re-pick
 let _busy = false;
 
 function renderDataView(host) {
-  host.innerHTML = `
-    <div class="view-head">
-      <h1>Your data</h1>
-      <p class="subtle">Everything stays on this device. Nothing is uploaded.</p>
-    </div>
-
-    <div class="card">
-      <div id="dropzone" class="dropzone" tabindex="0" role="button"
-           aria-label="Choose or drop an export file">
-        <div class="dropzone-icon" aria-hidden="true">📥</div>
-        <div class="dropzone-title">Drop an export here</div>
-        <div class="dropzone-sub">or click to choose a file</div>
-        <input type="file" id="file-input" hidden
-               accept=".zip,.xml,.csv,application/zip,text/xml,text/csv">
+  return dbGetAll('imports').then(imports => {
+    imports.sort((a, b) => b.importedAt - a.importedAt);
+    host.innerHTML = `
+      <div class="view-head">
+        <h1>Your data</h1>
+        <p class="subtle">Everything stays on this device. Nothing is uploaded.</p>
       </div>
-      <div id="import-status"></div>
-    </div>
 
-    <div id="inspection-result"></div>
+      <div class="card">
+        <div id="dropzone" class="dropzone" tabindex="0" role="button"
+             aria-label="Choose or drop an export file">
+          <div class="dropzone-icon" aria-hidden="true">📥</div>
+          <div class="dropzone-title">Drop an export here</div>
+          <div class="dropzone-sub">or click to choose a file</div>
+          <input type="file" id="file-input" hidden
+                 accept=".zip,.xml,.csv,application/zip,text/xml,text/csv">
+        </div>
+        <div id="import-status"></div>
+      </div>
 
-    ${exportHelpHtml()}`;
+      <div id="inspection-result"></div>
+      ${importHistoryHtml(imports)}
+      ${exportHelpHtml()}`;
 
-  wireDropzone();
-  if (_inspection) renderInspection(_inspection);
+    wireDropzone();
+    wireHistory();
+    if (_inspection) renderInspection(_inspection);
+  });
 }
 
 function wireDropzone() {
@@ -44,8 +48,8 @@ function wireDropzone() {
   zone.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); choose(); } };
   input.onchange = () => { if (input.files[0]) handleFile(input.files[0]); };
 
-  // The whole zone is a drop target. preventDefault on dragover is what actually
-  // enables dropping — without it the browser navigates away to the file instead.
+  // preventDefault on dragover is what actually enables dropping; without it the
+  // browser navigates away to the file instead.
   ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => {
     e.preventDefault(); zone.classList.add('dragging');
   }));
@@ -62,20 +66,18 @@ function handleFile(file) {
   if (_busy) return;
   _busy = true;
   _inspection = null;
+  _inspectedFile = file;
   el('inspection-result').innerHTML = '';
 
   const status = el('import-status');
-  const total = file.size;
   let lastPaint = 0;
-
   const onProgress = bytes => {
-    // Repainting on every chunk would spend more time in layout than in parsing.
     const now = Date.now();
     if (now - lastPaint < 100) return;
     lastPaint = now;
-    // For a zipped file the byte count is of the DECOMPRESSED stream, which is larger
+    // For a zipped file the byte count is of the DECOMPRESSED stream, which is bigger
     // than the file on disk, so a percentage would be misleading — show the raw count.
-    const pct = file.name.endsWith('.zip') ? null : (bytes / total) * 100;
+    const pct = /\.zip$/i.test(file.name) ? null : (bytes / file.size) * 100;
     status.innerHTML = progressBar(pct, `Reading… ${humanSize(bytes)}`);
   };
 
@@ -89,11 +91,14 @@ function handleFile(file) {
     })
     .catch(err => {
       console.error(err);
-      status.innerHTML = `<div class="error-box">
-        <strong>Could not read that file.</strong>
-        <div class="subtle">${escHtml(err && err.message || String(err))}</div></div>`;
+      status.innerHTML = errorBox('Could not read that file.', err);
     })
     .finally(() => { _busy = false; });
+}
+
+function errorBox(headline, err) {
+  return `<div class="error-box"><strong>${escHtml(headline)}</strong>
+    <div class="subtle">${escHtml(err && err.message || String(err))}</div></div>`;
 }
 
 function renderInspection(rep) {
@@ -113,10 +118,10 @@ function renderInspection(rep) {
     return;
   }
 
-  const span = rep.range.from && rep.range.to
-    ? `${rep.range.from} → ${rep.range.to}` : 'unknown';
+  const span = rep.range.from && rep.range.to ? `${rep.range.from} → ${rep.range.to}` : 'unknown';
   const years = rep.range.from && rep.range.to
     ? (daysBetween(rep.range.from, rep.range.to) / 365.25) : 0;
+  const importable = rep.file.kind === 'apple-zip' || rep.file.kind === 'apple-xml';
 
   host.innerHTML = `
     <div class="card">
@@ -126,6 +131,12 @@ function renderInspection(rep) {
         ${statTile('Workouts', humanCount(rep.totals.workouts), '')}
         ${statTile('Records', humanCount(rep.totals.records), `read in ${(rep.ms / 1000).toFixed(1)}s`)}
       </div>
+
+      ${importable ? `<div class="card-actions">
+        <button class="btn btn-primary" id="do-import">Import this file</button>
+        <button class="btn btn-ghost" id="copy-report">Copy report as text</button>
+      </div>` : `<p class="subtle">Importing this kind of file is not supported yet.</p>
+        ${copyReportButton()}`}
 
       <h3>Who recorded it</h3>
       <p class="subtle">Each device that contributed data. Overlapping sources are the
@@ -148,10 +159,83 @@ function renderInspection(rep) {
           <td>${t.mapped ? `<span class="yes">✓ ${escHtml(t.mapped)}</span>` : '<span class="no">—</span>'}</td>
         </tr>`).join('')}</tbody>
       </table></div>
-
-      ${copyReportButton()}
     </div>`;
+
   wireCopyButton(rep);
+  const btn = el('do-import');
+  if (btn) btn.onclick = () => startImport(_inspectedFile);
+}
+
+function startImport(file) {
+  if (_busy || !file) return;
+  _busy = true;
+  const status = el('import-status');
+  const btn = el('do-import');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+
+  let lastPaint = 0, stageText = 'Reading the file';
+  const paint = detail => { status.innerHTML = progressBar(null, detail); };
+
+  importFile(file, {
+    onStage: s => { stageText = s; paint(s); },
+    onProgress: bytes => {
+      const now = Date.now();
+      if (now - lastPaint < 120) return;
+      lastPaint = now;
+      paint(`${stageText}… ${humanSize(bytes)}`);
+    }
+  })
+    .then(({ batch, dedupe }) => {
+      status.innerHTML = '';
+      _inspection = null;
+      _inspectedFile = null;
+      const suppressed = dedupe.sessionsSuppressed + dedupe.dailySuppressed;
+      showToast(`Imported ${humanCount(batch.counts.sessions)} workouts` +
+                (suppressed ? ` · ${humanCount(suppressed)} duplicates set aside` : ''), 'success');
+      refreshView();
+    })
+    .catch(err => {
+      console.error(err);
+      status.innerHTML = errorBox('Import failed.', err);
+      if (btn) { btn.disabled = false; btn.textContent = 'Import this file'; }
+    })
+    .finally(() => { _busy = false; });
+}
+
+function importHistoryHtml(imports) {
+  if (!imports.length) return '';
+  return `<div class="card">
+    <h2>Imports</h2>
+    <p class="subtle">Each import can be undone in full. Undoing one brings back any
+       records it had superseded.</p>
+    ${imports.map(b => `
+      <div class="list-row">
+        <div>
+          <div class="list-title">${escHtml(b.fileName || b.kind)}</div>
+          <div class="subtle">${escHtml(b.range.from || '?')} → ${escHtml(b.range.to || '?')}
+            · ${humanCount(b.counts.sessions)} workouts
+            · ${humanCount(b.counts.daily)} daily figures</div>
+          <div class="subtle">imported ${new Date(b.importedAt).toLocaleString()}</div>
+        </div>
+        <button class="btn btn-ghost btn-small" data-undo="${escHtml(b.id)}">Undo</button>
+      </div>`).join('')}
+  </div>`;
+}
+
+function wireHistory() {
+  document.querySelectorAll('[data-undo]').forEach(btn => {
+    btn.onclick = () => confirmDialog({
+      title: 'Undo this import?',
+      message: 'Everything this file added is removed. Your original export is untouched, ' +
+               'so you can import it again at any time.',
+      confirmLabel: 'Undo import', danger: true
+    }, () => {
+      undoImport(btn.dataset.undo).then(({ sessions, daily }) => {
+        showToast(`Removed ${humanCount(sessions)} workouts and ${humanCount(daily)} daily figures`, 'success');
+        refreshView();
+      });
+    });
+  });
 }
 
 function statTile(label, value, sub) {
@@ -165,19 +249,15 @@ function statTile(label, value, sub) {
 
 function copyReportButton() {
   return `<div class="card-actions">
-    <button class="btn btn-ghost" id="copy-report">Copy report as text</button>
-  </div>`;
+    <button class="btn btn-ghost" id="copy-report">Copy report as text</button></div>`;
 }
 
 function wireCopyButton(rep) {
   const btn = el('copy-report');
   if (!btn) return;
-  btn.onclick = () => {
-    const text = inspectionReportText(rep);
-    navigator.clipboard.writeText(text)
-      .then(() => showToast('Report copied', 'success'))
-      .catch(() => showToast('Could not copy — check clipboard permissions', 'error'));
-  };
+  btn.onclick = () => navigator.clipboard.writeText(inspectionReportText(rep))
+    .then(() => showToast('Report copied', 'success'))
+    .catch(() => showToast('Could not copy — check clipboard permissions', 'error'));
 }
 
 // Getting the exports is the one part of this the app cannot do for you, so the
@@ -186,7 +266,7 @@ function exportHelpHtml() {
   return `
   <div class="card">
     <h2>How to get your exports</h2>
-    <details open>
+    <details>
       <summary><strong>Apple Health</strong> — your full history</summary>
       <ol>
         <li>Open the <strong>Health</strong> app on your iPhone.</li>

@@ -66,12 +66,10 @@ function loadApp() {
       sniffFile, humanSize,
       inspectFile, inspectionReportText,
       // dedupe + rollups (present from phase 3 onward)
-      dedupeSessions: typeof dedupeSessions === 'function' ? dedupeSessions : null,
-      electDailySources: typeof electDailySources === 'function' ? electDailySources : null,
-      sessionsOverlap: typeof sessionsOverlap === 'function' ? sessionsOverlap : null,
-      sourceRank: typeof sourceRank === 'function' ? sourceRank : null,
-      rollupPeriod: typeof rollupPeriod === 'function' ? rollupPeriod : null,
-      rollupDaily: typeof rollupDaily === 'function' ? rollupDaily : null,
+      dedupeSessions, applySessionDecisions,
+      electDailySources, applyDailyDecisions,
+      sessionsOverlap, overlapRatio, sourceRank, pickWinner, richness,
+      PARTIAL_WEAR_RATIO,
       DEFAULT_SETTINGS
     };`, sandbox, { filename: 'app-bundle.js' });
 

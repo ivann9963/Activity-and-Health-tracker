@@ -47,7 +47,7 @@ try {
   await page.goto(base, { waitUntil: 'networkidle' });
 
   const tabs = await page.locator('.nav-btn').allTextContents();
-  check('the tab bar is built from the view registry', tabs.length === 3, `got ${JSON.stringify(tabs)}`);
+  check('the tab bar is built from the view registry', tabs.length === 4, `got ${JSON.stringify(tabs)}`);
   check('the empty state invites an import',
     await page.locator('.empty-state').isVisible());
 
@@ -68,6 +68,34 @@ try {
     body.slice(0, 300));
   check('workouts are counted', /\b6\b/.test(body));
   check('tracked types are marked', body.includes('steps') && body.includes('sleep'));
+
+  // --- import, then check the reconciled numbers ---
+  await page.locator('#do-import').click();
+  await page.waitForSelector('.list-row', { timeout: 30000 });
+  check('the import is recorded in the history',
+    (await page.locator('.list-row').count()) === 1);
+
+  await page.locator('.nav-btn:has-text("Home")').click();
+  await page.waitForSelector('.metric-grid');
+  const home = await page.locator('#view-host').innerText();
+  check('the view opens on a period that actually has data', !/This week/.test(home), home.slice(0, 200));
+  check('all-time totals are shown', /All time/.test(home));
+
+  await page.locator('.segmented button:has-text("Year")').click();
+  await page.waitForSelector('.metric-grid');
+
+  await page.locator('.nav-btn:has-text("Duplicates")').click();
+  await page.waitForSelector('.dup-group', { timeout: 10000 });
+  const dups = await page.locator('#view-host').innerText();
+  check('the duplicated run is surfaced for review', /Running/.test(dups));
+  check('and the reason is explained', /same workout/.test(dups), dups.slice(0, 400));
+  check('the losing source is named', /Strava/.test(dups));
+
+  // Overruling the engine must actually change the stored decision.
+  await page.locator('[data-choose]').first().click();
+  await page.waitForSelector('.pill', { timeout: 10000 });
+  check('a manual override is recorded',
+    (await page.locator('.pill').count()) >= 1);
 
   await page.locator('.nav-btn:has-text("Settings")').click();
   await page.waitForSelector('.rank-input');

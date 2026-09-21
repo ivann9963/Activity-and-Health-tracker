@@ -211,3 +211,79 @@ pre.scroll { max-height: 260px; overflow-y: auto; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+
+/* === PERIOD VIEW, METRIC TILES, DUPLICATES =================================== */
+
+.segmented {
+  display: flex; background: var(--surface-2); border-radius: 10px;
+  padding: 3px; margin-bottom: var(--gap);
+}
+.segmented button {
+  flex: 1; padding: 8px; border: none; border-radius: 8px; background: none;
+  color: var(--text-dim); font-family: inherit; font-size: 14px; font-weight: 500;
+  cursor: pointer;
+}
+.segmented button.active { background: var(--surface); color: var(--text);
+                           box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+
+.period-nav { display: flex; align-items: center; justify-content: space-between;
+              margin-bottom: var(--gap); }
+.period-label { font-size: 17px; font-weight: 600; }
+.icon-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+.icon-btn:disabled { opacity: .35; cursor: default; }
+
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+               gap: 10px; margin-bottom: var(--gap); }
+.metric-tile {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px;
+  display: flex; flex-direction: column;
+}
+.metric-tile.is-empty { opacity: .5; }
+.metric-head { display: flex; align-items: center; gap: 6px; }
+.metric-icon { font-size: 15px; }
+.metric-name { font-size: 12px; color: var(--text-dim); text-transform: uppercase;
+               letter-spacing: 0.04em; }
+.metric-value { font-size: 24px; font-weight: 650; margin-top: 6px;
+                font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.metric-delta { font-size: 12px; margin-top: 3px; }
+.metric-delta.up { color: var(--accent); }
+.metric-delta.down { color: var(--warn); }
+.metric-delta.neutral { color: var(--text-dim); }
+.metric-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+
+/* Bars are decorative context, not a data table — screen readers skip them and the
+   numbers above carry the meaning. */
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 30px; margin-top: 10px; }
+.bar { flex: 1; background: var(--accent-dim); border-radius: 1px; min-height: 2px; opacity: .75; }
+
+.all-time .stat-value { font-size: 20px; }
+
+/* --- duplicates ------------------------------------------------------------- */
+.dup-group { padding: 12px 14px; }
+.dup-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dup-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0;
+           border-top: 1px solid var(--border); }
+.dup-row:first-of-type { border-top: none; }
+.dup-mark { width: 18px; text-align: center; font-size: 14px; padding-top: 1px; }
+.dup-row.counted .dup-mark { color: var(--accent); }
+.dup-row.set-aside { opacity: .62; }
+.dup-body { flex: 1; min-width: 0; }
+.dup-source { font-size: 14px; font-weight: 550; display: flex; gap: 8px;
+              align-items: baseline; flex-wrap: wrap; }
+.dup-value { font-variant-numeric: tabular-nums; }
+.dup-reason { font-size: 12px; color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px;
+        background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); }
+.btn-small { padding: 6px 11px; font-size: 13px; white-space: nowrap; }
+.card-actions.center { justify-content: center; }
+
+/* --- import history --------------------------------------------------------- */
+.list-row { display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.list-row:last-child { border-bottom: none; }
+.list-title { font-size: 14px; font-weight: 550; word-break: break-all; }

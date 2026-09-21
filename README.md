@@ -22,12 +22,15 @@ Under construction, in phases. Working today:
 - **File Inspector** — drop in an Apple Health `export.zip`/`export.xml` or a Strava
   `activities.csv` and see exactly what is inside: record types, counts, date coverage
   and which device recorded what. Nothing is written to storage.
-- Streaming Apple Health parser, a zero-dependency ZIP reader, the canonical record
-  schema and the metric registry underneath it.
+- **Import** — Apple Health exports, parsed in a worker so the tab stays responsive,
+  with progress, and undoable in full.
+- **Deduplication** — overlapping workouts are grouped and one is elected; steps and
+  other continuous metrics are never summed across devices. Every decision is visible
+  and reversible on the Duplicates screen.
+- **Week / month / year** — totals, comparison against the previous period, active
+  days, per-day bars, and all-time totals since your data begins.
 
-Next: the import itself, then the deduplication engine, then the week/month/year views.
-Totals are deliberately not shown yet — until the reconciliation step lands they would
-double-count anything two devices both recorded, and a wrong total is worse than none.
+Next: goals and pace, streaks, a Year in Review, then Fitbit sync and Strava import.
 
 ## Running it
 
@@ -88,7 +91,17 @@ js/
     apple-health.js   the Apple export parser
     sniffer.js        works out what a dropped file is
     inspector.js      reports a file's contents without importing
+    importer.js       parse in a worker, store, reconcile, undo
     import-ui.js      the Data screen
+  workers/
+    import-worker.js  keeps a 1GB parse off the UI thread
+  dedupe/
+    rules.js          source ranking and what counts as the same event
+    sessions.js       overlapping-workout grouping and election
+    streams.js        per-day source election for steps and the like
+    engine.js         runs both passes and writes back what changed
+    review-ui.js      the Duplicates screen
+  rollups.js          records -> week / month / year numbers
 tests/
   run.js · harness.js · ui-smoke.mjs · fixtures/
 ```

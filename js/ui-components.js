@@ -56,3 +56,8 @@ function progressBar(pct, label) {
 }
 
 function humanCount(n) { return Number(n || 0).toLocaleString(); }
+
+// "1 workouts" reads as a bug even when the number is right.
+function plural(n, word, pluralForm) {
+  return `${humanCount(n)} ${n === 1 ? word : (pluralForm || word + 's')}`;
+}
