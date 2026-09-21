@@ -47,6 +47,32 @@ function toKcal(value, unit) {
   return null;
 }
 
+// Interning: return one shared copy of a repeated string.
+//
+// This is a memory fix, not a speed one. A substring taken from a large parsed chunk
+// is, in V8, a view that keeps the whole parent string alive. Every stored record
+// holds a source name and a device name taken that way, so a few thousand records
+// can pin hundreds of megabytes of buffers that are otherwise finished with.
+//
+// The vocabulary these strings are drawn from is tiny — a handful of device names, a
+// dozen activity types — so mapping each to a single canonical copy frees every
+// parent buffer and costs one Map lookup. The `+ ''` is what forces V8 to
+// materialise a standalone string rather than store another view.
+const _interned = new Map();
+
+function intern(value) {
+  if (value == null) return value;
+  const key = String(value);
+  let held = _interned.get(key);
+  if (held === undefined) {
+    held = (key + '').slice(0);
+    // Guard against an unbounded table if a parser ever interns something unique per
+    // record; the table exists to hold a small vocabulary, not every value seen.
+    if (_interned.size < 5000) _interned.set(key, held);
+  }
+  return held;
+}
+
 // Apple writes whatever the device calls itself — "Ivan's iPhone", "Ivan’s Apple
 // Watch", "Иван iPhone". Source priority and the Duplicates screen need stable keys,
 // so personalised names collapse onto canonical ones here. The original is kept on
@@ -76,5 +102,6 @@ function deviceNameFrom(deviceAttr) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { toMetres, toSeconds, toKg, toKcal, normalizeSourceName, deviceNameFrom };
+  module.exports = { toMetres, toSeconds, toKg, toKcal, normalizeSourceName,
+                     deviceNameFrom, intern };
 }

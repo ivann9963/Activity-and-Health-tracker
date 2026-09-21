@@ -64,6 +64,9 @@ class AppleCollector {
     this.buckets = new DailyBuckets();
     this.currentWorkout = null;
     this.lastHr = new Map();   // source label -> the previous reading, awaiting its span
+    // One object per distinct source, shared by every record from it. Thousands of
+    // identical {vendor, app, device} objects is pure overhead.
+    this.sourceCache = new Map();
     this.meta = { exportDate: null, locale: null };
     this.tally = { records: 0, workouts: 0, types: Object.create(null),
                    sources: Object.create(null), from: null, to: null };
@@ -93,10 +96,18 @@ class AppleCollector {
     this.buckets.add(metric, localDate, source, value, agg, at);
   }
 
+  // Source objects are stored on every record, so their strings are interned: taken
+  // straight from the parse buffer they would each keep a chunk of the export alive.
   _source(attrs) {
-    const app = attrs.sourceName || null;
-    const device = deviceNameFrom(attrs.device) || normalizeSourceName(app);
-    return { vendor: 'apple', app, device };
+    const app = attrs.sourceName ? intern(attrs.sourceName) : null;
+    const device = intern(deviceNameFrom(attrs.device) || normalizeSourceName(app));
+    const key = (app || '') + '|' + device;
+    let source = this.sourceCache.get(key);
+    if (!source) {
+      source = { vendor: 'apple', app, device };
+      this.sourceCache.set(key, source);
+    }
+    return source;
   }
 
   // --- tag dispatch ---------------------------------------------------------------
@@ -193,7 +204,7 @@ class AppleCollector {
     if (!start || !end) { this.currentWorkout = null; return; }
 
     this.currentWorkout = {
-      rawActivity: attrs.workoutActivityType,
+      rawActivity: intern(attrs.workoutActivityType),
       activity: canonicalActivity('apple', attrs.workoutActivityType),
       start: start.ms, end: end.ms, tzOffset: start.offsetMin,
       durationSec: attrs.duration ? toSeconds(attrs.duration, attrs.durationUnit || 'min') : null,

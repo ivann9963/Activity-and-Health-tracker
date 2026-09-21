@@ -66,7 +66,7 @@ function loadApp() {
       // records
       hash64, makeSession, makeDaily, sourceLabel,
       // import
-      toMetres, toSeconds, toKg, toKcal, normalizeSourceName, deviceNameFrom,
+      toMetres, toSeconds, toKg, toKcal, normalizeSourceName, deviceNameFrom, intern,
       parseCSV, parseCSVObjects,
       XmlTagScanner, xmlUnescape, parseAttrs,
       zipEntries, zipEntryText, zipEntryStream,

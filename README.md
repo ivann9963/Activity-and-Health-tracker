@@ -147,7 +147,15 @@ npm test                 # unit tests — no dependencies, no browser, ~1s
 npm run check:worker     # the Worker sources parse (they never run in the unit tests)
 npm run test:ui          # drives the real UI in Chromium (needs: npm install)
 npm run test:ui:build    # the same checks against the built output in _site/
+npm run perf             # generate a ~100MB export and measure the import path
 ```
+
+`npm run perf` builds a realistically-shaped export — hundreds of step samples a day
+from two competing sources, heart rate as the most numerous type, workouts
+comparatively rare — and reports parse speed, retained memory and the reduction from
+source to stored. On a 96MB file: 5 seconds, 2.6MB stored (36× smaller), 3MB retained.
+It exists because the first run of it found a leak that would have made a real import
+fail on a phone.
 
 The unit tests load the real `js/` modules into a sandboxed Node context via
 `tests/harness.js`, so they exercise shipped code rather than a copy. They cover the

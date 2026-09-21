@@ -95,6 +95,16 @@ suite('normalisation', () => {
   eq('personalised phone name', app.normalizeSourceName("Ivan's iPhone"), 'iPhone');
   eq('personalised watch name', app.normalizeSourceName('Ivan’s Apple Watch'), 'Apple Watch');
   eq('google health relay', app.normalizeSourceName('Google Health'), 'Google Health');
+  // A substring taken from a parsed chunk is a view that keeps the whole parent
+  // alive in V8. Stored on every record, those views pinned 192MB of buffers for
+  // 2.6MB of data — enough to exhaust a phone on a large import.
+  const a = app.intern('Apple Watch');
+  const b = app.intern(['Apple', 'Watch'].join(' '));
+  ok('equal strings collapse to one shared copy', a === b);
+  eq('and the value is unchanged', a, 'Apple Watch');
+  ok('different strings stay different', app.intern('iPhone') !== a);
+  eq('null passes through', app.intern(null), null);
+
   eq('device blob yields the device name',
      app.deviceNameFrom('<<HKDevice: 0x28>, name:Apple Watch, manufacturer:Apple Inc.>'), 'Apple Watch');
 });
@@ -179,6 +189,14 @@ async function appleTests() {
     eq('coverage ends at the newest', res.tally.to, '2026-07-04');
 
     eq('one session per workout', res.sessions.length, 6);
+
+    // One source object shared by every record from that source, rather than
+    // thousands of identical copies each pinning its own parse buffer.
+    const watchRecords = res.daily.filter(d => d.source.device === 'Apple Watch');
+    ok('records from one source share a single source object',
+       watchRecords.length > 1 && watchRecords.every(d => d.source === watchRecords[0].source));
+    ok('and different sources do not share one',
+       res.daily.find(d => d.source.device === 'iPhone').source !== watchRecords[0].source);
     const watchRun = res.sessions.find(s => s.source.device === 'Apple Watch' && s.localDate === '2024-03-12');
     eq('nested WorkoutStatistics give the distance', watchRun.distanceM, 6200);
     eq('duration is converted to seconds', watchRun.durationSec, 1950);
