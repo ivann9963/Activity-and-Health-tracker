@@ -145,8 +145,10 @@ try {
     (await page.locator('.months svg').count()) > 0);
   check('the calendar heatmap renders',
     (await page.locator('.heatmap .heat-cell').count()) > 300);
-  check('the heatmap has a scale legend',
-    (await page.locator('.heat-swatch').count()) === 5);
+  // Four steps, not five: the "nothing recorded" state is not a level on the scale,
+  // and showing it as one implies zero is a shade of green.
+  check('the heatmap legend shows the four data steps',
+    (await page.locator('.heat-swatch').count()) === 4);
   // Every mark must be able to explain itself on hover — including the empty ones,
   // where "nothing recorded" is the useful answer rather than silence.
   const firstChartTips = await page.locator('.months').first().locator('svg title').count();

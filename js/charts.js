@@ -41,21 +41,24 @@ function columnChart(data, opts) {
   const o = opts || {};
   const width = o.width || 640;
   const height = o.height || 180;
-  // Sized from the widest tick label rather than fixed, so "20k" and "1,250 km" both
-  // fit instead of being clipped at the left edge.
-  const padLeft = o.padLeft == null ? null : o.padLeft;
   const padBottom = 22;
   const padTop = 10;
-  const plotW = width - leftPad - 8;
-  const plotH = height - padBottom - padTop;
   const format = o.format || (v => String(Math.round(v)));
 
   const max = Math.max(...data.map(d => d.value || 0), 0);
   const scaleMax = niceCeiling(max);
 
+  // Three gridlines is enough to read a value against; more is chrome competing with
+  // the data.
   const tickValues = [0, 0.5, 1].map(f => f * scaleMax);
+
+  // The left gutter is measured from the widest tick label rather than fixed, so
+  // "20k" and "1,250 km" both fit instead of being clipped at the edge.
   const widestTick = Math.max(...tickValues.map(v => String(format(v, true)).length));
-  const leftPad = padLeft != null ? padLeft : Math.max(28, widestTick * 6.5 + 12);
+  const leftPad = o.padLeft != null ? o.padLeft : Math.max(28, widestTick * 6.5 + 12);
+
+  const plotW = width - leftPad - 8;
+  const plotH = height - padBottom - padTop;
 
   const svg = svgEl('svg', {
     viewBox: `0 0 ${width} ${height}`,
@@ -64,8 +67,7 @@ function columnChart(data, opts) {
     'aria-label': o.ariaLabel || 'Column chart'
   });
 
-  // Three gridlines is enough to read a value against; more is chrome competing
-  // with the data. Solid and hairline — dashing reads as noise.
+  // Solid and hairline — dashing reads as noise.
   for (const tick of tickValues) {
     const y = padTop + plotH - (scaleMax ? (tick / scaleMax) * plotH : 0);
     svg.appendChild(svgEl('line', {
