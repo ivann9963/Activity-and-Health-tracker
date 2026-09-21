@@ -14,7 +14,11 @@
 </head>
 <body>
 
-<a href="#view-host" class="skip-link">Skip to content</a>
+<!-- The href keeps this a real link for assistive technology, but the hash belongs
+     to the router: letting it through would change the route rather than the focus. -->
+<a href="#view-host" class="skip-link"
+   onclick="event.preventDefault(); document.getElementById('view-host').focus();"
+   >Skip to content</a>
 
 <header class="app-header">
   <h1 class="app-title"><span aria-hidden="true">🏃</span> Activity Ledger</h1>

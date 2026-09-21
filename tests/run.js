@@ -618,6 +618,12 @@ function fitbitParseTests() {
     // read as a resting-heart-rate file and vice versa.
     eq('resting heart rate is not plain heart rate',
        app.classifyFitbitFile('Global Export Data/resting_heart_rate-2026-07-01.json'), 'resting_hr');
+    // `steps[-_]` also matches `steps_intraday`, so the narrower rule has to come
+    // first or those files are read as daily steps and counted twice.
+    eq('intraday steps are skipped, not summed a second time',
+       app.classifyFitbitFile('Global Export Data/steps_intraday-2026-07-01.json'), 'ignore');
+    eq('ordinary daily steps still read',
+       app.classifyFitbitFile('Global Export Data/steps-2026-07-01.json'), 'steps');
     eq('raw heart rate is read, for the bands',
        app.classifyFitbitFile('Global Export Data/heart_rate-2026-07-01.json'), 'heart_rate');
     eq('distance is skipped — it already arrives on the exercise records',
@@ -971,6 +977,34 @@ function dateRangeOf(start, days) {
   return out;
 }
 
+// --- heart-rate spans -----------------------------------------------------------
+async function heartRateSpanTests() {
+  // A record that states its own interval is credited that interval. It must then
+  // stop being "pending", or the next reading credits it a second time by closing
+  // the gap behind it. Sources that mix both forms are exactly where this bites.
+  const xml = `<?xml version="1.0"?><HealthData locale="en_GB">
+    <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min"
+      startDate="2026-03-01 10:00:00 +0000" endDate="2026-03-01 10:01:00 +0000" value="150"/>
+    <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min"
+      startDate="2026-03-01 10:04:00 +0000" endDate="2026-03-01 10:04:00 +0000" value="150"/>
+    <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min"
+      startDate="2026-03-01 10:05:00 +0000" endDate="2026-03-01 10:05:00 +0000" value="150"/>
+    </HealthData>`;
+  const bytes = new TextEncoder().encode(xml);
+  const stream = new ReadableStream({
+    start(c) { c.enqueue(bytes); c.close(); }
+  });
+  const res = await app.scanAppleExport(stream, { importBatch: 't' });
+  const band = res.daily.find(d => d.metric === 'hr_band_140');
+
+  suite('heart rate: an interval is counted once', () => {
+    // 60s for the stated interval, plus 60s for the gap between the two instants.
+    // The old behaviour also credited the 180s gap after the interval record,
+    // inflating this to 300s.
+    eq('the stated interval and the instant gap, and nothing more', band.value, 120);
+  });
+}
+
 // --- insights ---------------------------------------------------------------------
 function insightsTests() {
   const S = (over) => ({ activity: 'running', localDate: '2026-03-02',
@@ -1080,6 +1114,7 @@ function insightsTests() {
     motivationTests();
     chartTests();
     insightsTests();
+    await heartRateSpanTests();
     await zipTests();
     await takeoutTests();
     fitbitParseTests();

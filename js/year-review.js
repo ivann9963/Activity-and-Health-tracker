@@ -79,6 +79,10 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
   const daysInYear = days.total;
   const movingSec = sessions.reduce((n, s) => n + (s.durationSec || 0), 0);
   const share = timeByActivity(sessions, { excludeWalking: true });
+  // The shares are percentages of the walking-excluded total, so that is what they
+  // have to be quoted against — movingSec includes walking and would make the
+  // percentages describe a figure they were not computed from.
+  const shareTotal = share.reduce((n, a) => n + a.seconds, 0);
 
   return `
     <div class="year-nav">
@@ -102,7 +106,7 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
       <h2>Where the time went</h2>
       <p class="headline">Most of it went on ${share[0].icon}
         <strong>${escHtml(share[0].label)}</strong> — ${Math.round(share[0].pct)}% of
-        ${escHtml(formatMetric('time_gym', movingSec))}.</p>
+        ${escHtml(formatMetric('time_gym', shareTotal))}.</p>
       ${share.map(a => `
         <div class="share-row">
           <span class="share-label">${a.icon} ${escHtml(a.label)}</span>

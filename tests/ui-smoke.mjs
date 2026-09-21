@@ -302,6 +302,33 @@ try {
   const restored = await page.locator('#view-host').innerText();
   check('the data comes back', /All time/i.test(restored) && /km/.test(restored),
     restored.slice(0, 300));
+  const afterRestore = restored;
+
+  // Restoring the same backup again must be a no-op: it adds what is missing and
+  // leaves what is already here alone, rather than overwriting newer values.
+  await page.locator('.nav-btn:has-text("Data")').click();
+  await page.waitForSelector('#dropzone');
+  await page.locator('#file-input').setInputFiles(backupPath);
+  await page.waitForSelector('#do-import', { timeout: 20000 });
+  await page.locator('#do-import').click();
+  // Wait for the restore's own toast rather than whichever is on screen — an earlier
+  // one may still be fading.
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('.toast')].some(t => /Restored/.test(t.textContent)),
+    null, { timeout: 30000 });
+  const secondToast = await page.evaluate(() =>
+    [...document.querySelectorAll('.toast')].map(t => t.textContent.trim())
+      .find(t => /Restored/.test(t)));
+  check('restoring twice reports what was already there',
+    /already here/.test(secondToast || ''), secondToast);
+
+  await page.locator('.nav-btn:has-text("Home")').click();
+  await page.waitForSelector('.metric-grid');
+  await page.locator('.segmented button:has-text("Year")').click();
+  await page.waitForSelector('.metric-grid');
+  const afterSecond = await page.locator('#view-host').innerText();
+  check('and changes nothing', afterSecond === afterRestore,
+    'totals differed after a second restore');
   fs.unlinkSync(backupPath);
 
   if (AGAINST_BUILD) {

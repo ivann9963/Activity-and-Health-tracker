@@ -176,17 +176,21 @@ class AppleCollector {
     if (!isFinite(bpm) || bpm <= 0) return;
 
     const previous = this.lastHr.get(label);
-    this.lastHr.set(label, { ms: start.ms, bpm, dateKey, offsetMin: start.offsetMin });
-    if (!this.collect) return;
 
     // Some sources write a real interval rather than an instant; trust it when given.
     const ownSpan = end && end.ms > start.ms ? Math.min(end.ms - start.ms, HR_GAP_CAP_MS) : 0;
     if (ownSpan > 0) {
-      this._add(hrBandMetric(hrBandFor(bpm)), dateKey, source, ownSpan / 1000, 'sum', start.ms);
+      // Its duration is already known, so it must NOT stay pending — otherwise the
+      // next reading credits it a second time via the gap rule below.
+      this.lastHr.delete(label);
+      if (this.collect) {
+        this._add(hrBandMetric(hrBandFor(bpm)), dateKey, source, ownSpan / 1000, 'sum', start.ms);
+      }
       return;
     }
 
-    if (!previous) return;
+    this.lastHr.set(label, { ms: start.ms, bpm, dateKey, offsetMin: start.offsetMin });
+    if (!this.collect || !previous) return;
     const gap = start.ms - previous.ms;
     // Out-of-order records would otherwise contribute negative time.
     if (gap <= 0) return;

@@ -24,7 +24,7 @@ function renderDataView(host) {
           <div class="dropzone-title">Drop an export here</div>
           <div class="dropzone-sub">or click to choose a file</div>
           <input type="file" id="file-input" hidden
-                 accept=".zip,.xml,.csv,application/zip,text/xml,text/csv">
+                 accept=".zip,.xml,.csv,.gz,.json,application/zip,application/gzip,text/xml,text/csv,application/json">
         </div>
         <div id="import-status"></div>
       </div>
@@ -110,7 +110,9 @@ function renderInspection(rep) {
   if (rep.unsupported) {
     host.innerHTML = `<div class="card">
       <h2>${escHtml(rep.file.label)}</h2>
-      <p class="subtle">This file was recognised but cannot be read yet.</p>
+      <p class="subtle">${rep.error
+        ? escHtml(rep.error)
+        : 'This file was recognised but cannot be read yet.'}</p>
       ${rep.sniff.entries ? `<details><summary>Archive contents
         (${rep.sniff.entries.length} files)</summary>
         <pre class="scroll">${escHtml(rep.sniff.entries.map(e => e.name).join('\n'))}</pre>
@@ -207,8 +209,10 @@ function startImport(file) {
       _inspectedFile = null;
       if (result.restored) {
         const r = result.restored;
+        const skipped = Object.values(r._skipped || {}).reduce((n, v) => n + v, 0);
         showToast(`Restored ${plural(r.sessions || 0, 'workout')} and ` +
-                  `${plural(r.daily || 0, 'daily figure')}`, 'success');
+                  `${plural(r.daily || 0, 'daily figure')}` +
+                  (skipped ? ` · ${humanCount(skipped)} already here` : ''), 'success');
       } else {
         const suppressed = result.dedupe.sessionsSuppressed + result.dedupe.dailySuppressed;
         showToast(`Imported ${plural(result.batch.counts.sessions, 'workout')}` +

@@ -87,22 +87,58 @@ function readBackupFile(file) {
   });
 }
 
-// Restoring merges rather than replaces. Every record carries a deterministic id, so
-// writing one that already exists is a no-op — which means restoring an older backup
-// on top of a newer database adds what was missing instead of throwing away the
-// difference. Replacing would be the more destructive reading of "restore".
+// Restoring ADDS what is missing and leaves what is already here untouched.
+//
+// Writing every row would be wrong, not merely redundant: a daily record's id is
+// derived from its metric, date and source but NOT its value, so an older backup's
+// figure would silently replace a fuller one recorded since. Settings and goals would
+// revert wholesale. So existing keys are read first and only genuinely new rows are
+// written — which is what the restore screen promises.
+//
+// Written in the same chunks the importer uses: a single transaction over tens of
+// thousands of rows blocks the tab for as long as it takes.
+const RESTORE_CHUNK = 2000;
+
 function restoreBackup(backup) {
   const stores = backup.stores || {};
   const written = {};
+  const skipped = {};
+
   return BACKUP_STORES.reduce((chain, name) => chain.then(() => {
     const rows = stores[name];
-    if (!Array.isArray(rows) || !rows.length) { written[name] = 0; return; }
-    return dbPutMany(name, rows).then(n => { written[name] = n; });
+    written[name] = 0;
+    skipped[name] = 0;
+    if (!Array.isArray(rows) || !rows.length) return;
+
+    return existingKeys(name).then(have => {
+      const fresh = rows.filter(r => {
+        const key = r && (r.id != null ? r.id : r.key);
+        if (key == null) return false;
+        if (have.has(key)) { skipped[name]++; return false; }
+        return true;
+      });
+      if (!fresh.length) return;
+
+      let i = 0;
+      const step = () => {
+        if (i >= fresh.length) return Promise.resolve();
+        const slice = fresh.slice(i, i + RESTORE_CHUNK);
+        i += RESTORE_CHUNK;
+        return dbPutMany(name, slice).then(n => { written[name] += n; return step(); });
+      };
+      return step();
+    });
   }), Promise.resolve())
     // Reconciliation is re-run because a restore can introduce records that change
     // which source wins on a given day.
     .then(runDedupe)
-    .then(() => written);
+    .then(() => ({ ...written, _skipped: skipped }));
+}
+
+function existingKeys(store) {
+  return tx([store], 'readonly')
+    .then(t => promisifyRequest(t.objectStore(store).getAllKeys()))
+    .then(keys => new Set(keys));
 }
 
 function backupSummary(backup) {

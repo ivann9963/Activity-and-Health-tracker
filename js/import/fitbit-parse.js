@@ -53,6 +53,9 @@ function parseFitbitDate(str) {
 const FITBIT_FILE_KINDS = [
   { kind: 'resting_hr', re: /(^|\/)resting_heart_rate[-_]/i },
   { kind: 'heart_rate', re: /(^|\/)heart_rate[-_]/i },
+  // Must precede the steps rule: `steps[-_]` also matches `steps_intraday`, and
+  // reading those would sum the same steps twice.
+  { kind: 'ignore',     re: /(^|\/)steps_intraday[-_]/i },
   { kind: 'steps',      re: /(^|\/)steps[-_]/i },
   { kind: 'sleep',      re: /(^|\/)sleep[-_]/i },
   { kind: 'exercise',   re: /(^|\/)(exercise|activities)[-_]/i },
@@ -62,7 +65,7 @@ const FITBIT_FILE_KINDS = [
   // home here. time_in_heart_rate_zones is Fitbit's own banding, but its boundaries
   // are percentages of a max heart rate the export does not state, so it cannot be
   // placed on an absolute bpm scale — the raw samples above can.
-  { kind: 'ignore',     re: /(^|\/)(altitude|calories|distance|swim_lengths|estimated_oxygen|time_in_heart_rate_zones|steps_intraday)[-_]/i }
+  { kind: 'ignore',     re: /(^|\/)(altitude|calories|distance|swim_lengths|estimated_oxygen|time_in_heart_rate_zones)[-_]/i }
 ];
 
 function classifyFitbitFile(name) {

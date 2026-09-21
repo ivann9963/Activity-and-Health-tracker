@@ -65,7 +65,12 @@ function intern(value) {
   const key = String(value);
   let held = _interned.get(key);
   if (held === undefined) {
-    held = (key + '').slice(0);
+    // split/join builds the string from scratch, so the result cannot be a view onto
+    // the parent whatever the engine decides to optimise. Concatenation and slice
+    // tricks are engine-dependent: measured against V8, `(s + '').slice(0)` freed the
+    // parent in one arrangement and pinned it in another, which is not a property to
+    // depend on. These strings are short and few, so the cost does not matter.
+    held = key.split('').join('');
     // Guard against an unbounded table if a parser ever interns something unique per
     // record; the table exists to hold a small vocabulary, not every value seen.
     if (_interned.size < 5000) _interned.set(key, held);
