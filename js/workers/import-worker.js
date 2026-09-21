@@ -10,6 +10,9 @@
 importScripts(
   '../config.js',
   '../dates.js',
+  // The parser buckets heart-rate readings into bands defined in the metric registry,
+  // so the worker needs it too. Leaving it out made every import throw.
+  '../metrics.js',
   '../activity-types.js',
   '../records.js',
   '../import/normalize.js',

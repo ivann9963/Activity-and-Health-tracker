@@ -68,8 +68,8 @@ try {
 
   const tabs = await page.locator('.nav-btn').allTextContents();
   const tabText = tabs.join(' ');
-  check('the tab bar carries the primary screens', tabs.length === 4, `got ${JSON.stringify(tabs)}`);
-  check('including the year review', /Year/.test(tabText));
+  check('the tab bar carries the primary screens', tabs.length === 5, `got ${JSON.stringify(tabs)}`);
+  check('including the year review and insights', /Year/.test(tabText) && /Insights/.test(tabText));
   check('reconciliation is not one of them', !/Duplicates/.test(tabText));
   check('the empty state invites an import',
     await page.locator('.empty-state').isVisible());
@@ -132,6 +132,29 @@ try {
   const combined = await page.locator('#view-host').innerText();
   check('Fitbit data reaches the totals', /Racket|Tennis|RACKET/i.test(combined),
     combined.slice(0, 300));
+
+  // --- insights ---
+  await page.locator('.nav-btn:has-text("Insights")').click();
+  await page.waitForSelector('.share-row', { timeout: 15000 });
+  const insights = await page.locator('#view-host').innerText();
+  check('the time share names where most of it went',
+    /Most of it went on/i.test(insights), insights.slice(0, 400));
+  check('active days separate deliberate activity from walking',
+    /active days/i.test(insights) && /walking only/i.test(insights));
+  check('effort by sport reports a weighted average',
+    /effort by sport/i.test(insights) && /bpm/.test(insights), insights.slice(0, 900));
+  check('the period can be switched', (await page.locator('[data-insight]').count()) === 3);
+
+  // Heart-rate bands live in 2024 in the fixture, so stepping back a year is also a
+  // check that the period navigation actually moves the data.
+  await page.locator('#insight-prev').click();
+  await page.waitForTimeout(300);
+  await page.locator('#insight-prev').click();
+  await page.waitForSelector('#hr-threshold', { timeout: 15000 });
+  const hr2024 = await page.locator('#view-host').innerText();
+  check('stepping back reaches the heart-rate data',
+    /above 140 bpm/i.test(hr2024), hr2024.slice(0, 500));
+  check('and the bands are labelled as ranges', /140–159 bpm/.test(hr2024));
 
   // --- metric detail and goals ---
   await page.locator('.nav-btn:has-text("Home")').click();

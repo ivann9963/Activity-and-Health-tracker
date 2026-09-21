@@ -172,7 +172,7 @@ async function appleTests() {
   const res = await parseFixture(1 << 20); // one chunk
   fixtureResult = res;
   suite('Apple Health parser', () => {
-    eq('every Record element is counted', res.tally.records, 17);
+    eq('every Record element is counted', res.tally.records, 22);
     eq('every Workout element is counted', res.tally.workouts, 6);
     eq('the export date is read', res.meta.exportDate, '2026-09-20 11:02:19 +0300');
     eq('coverage starts at the oldest record', res.tally.from, '2019-06-01');
@@ -214,6 +214,15 @@ async function appleTests() {
     const sleep = byMetric('sleep');
     eq('sleep is attributed to the wake day', sleep[0].localDate, '2024-03-12');
     eq('only genuinely-asleep stages count', sleep[0].value, 420);
+
+    // Heart rate: 140 held 1 min, 150 held 2 min (both in the 140 band), 165 held
+    // 1 min and 175 held 56 min capped to 5 (both in the 160 band). The final
+    // reading of the stream has no following sample, so it has no span — which is
+    // correct, since nothing in the file says how long it lasted.
+    eq('time in the 140 band', byMetric('hr_band_140')[0].value, 180);
+    eq('time in the 160 band, with the long gap capped', byMetric('hr_band_160')[0].value, 360);
+    eq('a band nobody reached is not stored', byMetric('hr_band_100').length, 0);
+    eq('the last reading contributes no span', byMetric('hr_band_0').length, 0);
 
     ok('an unmapped record type is reported but not stored',
        res.tally.types['HKQuantityTypeIdentifierEnvironmentalAudioExposure'].count === 1 &&
@@ -898,6 +907,106 @@ function dateRangeOf(start, days) {
   return out;
 }
 
+// --- insights ---------------------------------------------------------------------
+function insightsTests() {
+  const S = (over) => ({ activity: 'running', localDate: '2026-03-02',
+                         durationSec: 1800, distanceM: 5000, avgHr: 150, ...over });
+
+  suite('where the time goes', () => {
+    const share = app.timeByActivity([
+      S({ activity: 'running', durationSec: 3600 }),
+      S({ activity: 'strength', durationSec: 5400 }),
+      S({ activity: 'strength', durationSec: 1800 }),
+      S({ activity: 'racket', durationSec: 1800 })
+    ]);
+    eq('the biggest share leads', share[0].activity, 'strength');
+    eq('and it is a share of time, not of sessions', Math.round(share[0].pct), 57);
+    eq('every activity is represented', share.length, 3);
+    eq('shares add up', Math.round(share.reduce((n, s) => n + s.pct, 0)), 100);
+
+    // Walking is ambient rather than chosen and swamps everything when included.
+    const withWalk = [S({ activity: 'walking', durationSec: 36000 }),
+                      S({ activity: 'running', durationSec: 3600 })];
+    eq('walking can be left out', app.timeByActivity(withWalk, { excludeWalking: true })
+       .map(s => s.activity), ['running']);
+    eq('or kept in', app.timeByActivity(withWalk).length, 2);
+
+    eq('a superseded session never counts',
+       app.timeByActivity([S({ durationSec: 3600, supersededBy: 'x' })]).length, 0);
+  });
+
+  suite('average heart rate per sport', () => {
+    // Weighted by duration: a ten-minute warm-up must not count as much as a
+    // two-hour ride when averaging.
+    const hr = app.avgHrByActivity([
+      S({ activity: 'running', avgHr: 160, durationSec: 7200 }),
+      S({ activity: 'running', avgHr: 120, durationSec: 600 }),
+      S({ activity: 'strength', avgHr: 110, durationSec: 3600 })
+    ]);
+    const run = hr.find(h => h.activity === 'running');
+    eq('running averages toward the longer session', run.avgHr, 157);
+    eq('the hardest sport leads', hr[0].activity, 'running');
+    eq('session counts come along', run.sessions, 2);
+    eq('as does the highest single session', run.highestSessionAvg, 160);
+    eq('sessions with no heart rate are skipped',
+       app.avgHrByActivity([S({ avgHr: null })]).length, 0);
+  });
+
+  suite('running pace', () => {
+    eq('pace is seconds per kilometre',
+       app.sessionPace({ distanceM: 10000, durationSec: 3000 }), 300);
+    eq('and renders as minutes and seconds', app.formatPace(300), '5:00 /km');
+    eq('padding the seconds', app.formatPace(305), '5:05 /km');
+
+    // Implausible values are data errors, not achievements.
+    eq('faster than a world record is rejected',
+       app.sessionPace({ distanceM: 10000, durationSec: 600 }), null);
+    eq('slower than walking is not a run',
+       app.sessionPace({ distanceM: 1000, durationSec: 2400 }), null);
+    eq('a distance too short to mean anything is rejected',
+       app.sessionPace({ distanceM: 200, durationSec: 60 }), null);
+    eq('a session with no distance has no pace',
+       app.sessionPace({ durationSec: 1800 }), null);
+
+    const prog = app.paceProgression([
+      S({ localDate: '2026-01-05', distanceM: 5000, durationSec: 1800 }),   // 6:00/km
+      S({ localDate: '2026-01-20', distanceM: 5000, durationSec: 1500 }),   // 5:00/km
+      S({ localDate: '2026-02-10', distanceM: 10000, durationSec: 2700 })   // 4:30/km
+    ]);
+    eq('one entry per month', prog.length, 2);
+    // Weighted by distance: total time over total distance, so a short sprint does
+    // not outweigh a long steady run.
+    eq('January is the weighted average of its runs', Math.round(prog[0].pace), 330);
+    eq('and its best single run is kept', prog[0].best, 300);
+    eq('February is faster', Math.round(prog[1].pace), 270);
+    eq('runs are counted', prog[0].runs, 2);
+
+    const best = app.bestPaces([
+      S({ localDate: '2026-01-05', distanceM: 5000, durationSec: 1800 }),
+      S({ localDate: '2026-02-10', distanceM: 5000, durationSec: 1350 })
+    ]);
+    eq('the fastest run leads', best[0].date, '2026-02-10');
+  });
+
+  suite('active days', () => {
+    // Walking does not make a day active: a day at a desk still records a walk to
+    // the kitchen, and counting it makes every day look active.
+    const days = app.activeDays([
+      S({ localDate: '2026-03-01', activity: 'running' }),
+      S({ localDate: '2026-03-01', activity: 'walking' }),
+      S({ localDate: '2026-03-02', activity: 'walking' }),
+      S({ localDate: '2026-03-04', activity: 'strength' })
+    ], '2026-03-01', '2026-03-05');
+
+    eq('two genuinely active days', days.active, 2);
+    eq('one day of walking alone', days.walkingOnly, 1);
+    eq('and two with nothing at all', days.inactive, 2);
+    eq('which adds up to the range', days.active + days.walkingOnly + days.inactive, days.total);
+    eq('a day with both counts as active, not as walking-only', days.dates.has('2026-03-01'), true);
+    eq('the share is of the whole range', Math.round(days.pct), 40);
+  });
+}
+
 // --- run ------------------------------------------------------------------------------
 (async () => {
   try {
@@ -906,6 +1015,7 @@ function dateRangeOf(start, days) {
     rollupTests();
     motivationTests();
     chartTests();
+    insightsTests();
     await zipTests();
     await takeoutTests();
     fitbitParseTests();

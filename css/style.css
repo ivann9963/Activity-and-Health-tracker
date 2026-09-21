@@ -401,3 +401,24 @@ a.metric-tile:hover { border-color: var(--accent); }
               font-variant-numeric: tabular-nums; }
 .goal-unit { color: var(--text-dim); font-size: 14px; margin-right: 4px; }
 .fact-value .subtle { font-weight: 400; margin-left: 4px; }
+.chart-dot { transition: r .12s; }
+.chart-dot:hover { r: 6; }
+
+/* --- share bars ----------------------------------------------------------------
+   A ranked list of shares. The data-end is rounded and the baseline square, the
+   same rule the SVG marks follow. */
+.share-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+             align-items: baseline; margin-top: 12px; }
+.share-label { font-size: 14px; }
+.share-value { font-size: 13px; color: var(--text-dim);
+               font-variant-numeric: tabular-nums; white-space: nowrap; }
+.share-track { grid-column: 1 / -1; height: 8px; border-radius: 0 4px 4px 0;
+               background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.share-fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--accent-dim);
+              min-width: 2px; }
+.share-row:first-of-type .share-fill { background: var(--accent); }
+.headline { font-size: 15px; line-height: 1.5; margin: 10px 0 4px; }
+.hero-inline { font-size: 26px; font-weight: 650; margin: 12px 0 4px;
+               letter-spacing: -0.02em; display: flex; align-items: baseline;
+               gap: 8px; flex-wrap: wrap; }
+.hero-inline .subtle { font-size: 14px; font-weight: 400; }

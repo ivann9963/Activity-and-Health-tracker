@@ -138,6 +138,99 @@ function niceCeiling(value) {
   return step * magnitude;
 }
 
+// A trend over time. Used where a column chart would mislead — pace is the clear
+// case: faster is a *lower* number, so shorter bars would mean better performance and
+// the chart would read backwards. A line carries direction without implying that the
+// area underneath means anything.
+//
+// `invert` flips the axis so that better is up regardless of which way the number
+// runs, and the axis labels say which way is which.
+function lineChart(data, opts) {
+  const o = opts || {};
+  const width = o.width || 640;
+  const height = o.height || 180;
+  const padBottom = 22;
+  const padTop = 12;
+  const format = o.format || (v => String(Math.round(v)));
+
+  const values = data.filter(d => d.value != null).map(d => d.value);
+  if (!values.length) return svgEl('svg', { viewBox: `0 0 ${width} ${height}` });
+
+  // A line chart does not have to start at zero — a pace between 4:30 and 6:00 plotted
+  // from zero is a flat line at the top of the frame. Padding the range keeps the
+  // shape readable without exaggerating it.
+  let lo = Math.min(...values), hi = Math.max(...values);
+  const span = hi - lo || Math.max(1, hi * 0.1);
+  lo -= span * 0.15;
+  hi += span * 0.15;
+
+  const ticks = [lo, (lo + hi) / 2, hi];
+  const widestTick = Math.max(...ticks.map(v => String(format(v, true)).length));
+  const leftPad = o.padLeft != null ? o.padLeft : Math.max(30, widestTick * 6.5 + 12);
+  const plotW = width - leftPad - 10;
+  const plotH = height - padBottom - padTop;
+
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${width} ${height}`, class: 'chart', role: 'img',
+    'aria-label': o.ariaLabel || 'Trend over time'
+  });
+
+  // With `invert`, a lower value sits higher — so "better" is always up.
+  const yFor = v => {
+    const t = (v - lo) / (hi - lo);
+    return padTop + (o.invert ? t : 1 - t) * plotH;
+  };
+  const xFor = i => leftPad + (data.length === 1 ? plotW / 2 : (i / (data.length - 1)) * plotW);
+
+  for (const tick of ticks) {
+    const y = yFor(tick);
+    svg.appendChild(svgEl('line', {
+      x1: leftPad, x2: width - 10, y1: y, y2: y, stroke: CHART.gridColor, 'stroke-width': 1
+    }));
+    const label = svgEl('text', {
+      x: leftPad - 8, y: y + 4, 'text-anchor': 'end', class: 'chart-tick', fill: CHART.axisText
+    });
+    label.textContent = format(tick, true);
+    svg.appendChild(label);
+  }
+
+  const points = data.map((d, i) => (d.value == null ? null : { x: xFor(i), y: yFor(d.value), d }))
+                     .filter(Boolean);
+  if (points.length > 1) {
+    svg.appendChild(svgEl('path', {
+      d: points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(''),
+      fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2,
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round'
+    }));
+  }
+
+  // Markers carry a ring in the surface colour so they stay legible where they
+  // overlap the line or each other. The ring is part of the hit target, not decoration.
+  for (const p of points) {
+    const dot = svgEl('circle', {
+      cx: p.x, cy: p.y, r: 4.5, fill: 'var(--accent)',
+      stroke: 'var(--surface)', 'stroke-width': 2, class: 'chart-dot'
+    });
+    const title = svgEl('title');
+    title.textContent = p.d.title || `${p.d.label}: ${format(p.d.value)}`;
+    dot.appendChild(title);
+    svg.appendChild(dot);
+  }
+
+  const stride = data.length > 8 ? Math.ceil(data.length / 8) : 1;
+  data.forEach((d, i) => {
+    if (i % stride) return;
+    const label = svgEl('text', {
+      x: xFor(i), y: height - 6, 'text-anchor': 'middle',
+      class: 'chart-tick', fill: CHART.axisText
+    });
+    label.textContent = d.label;
+    svg.appendChild(label);
+  });
+
+  return svg;
+}
+
 // A year of days as a grid, one column per week. Magnitude is carried by a single
 // hue getting darker (lighter, on a dark surface) — never a rainbow, and never a
 // second hue.

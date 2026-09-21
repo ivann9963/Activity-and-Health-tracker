@@ -29,7 +29,8 @@ const FILES = [
   'js/equivalences.js',
   'js/streaks.js',
   'js/goals.js',
-  'js/charts.js'
+  'js/charts.js',
+  'js/insights.js'
 ];
 
 function loadApp() {
@@ -85,6 +86,8 @@ function loadApp() {
       distanceEquivalence, durationEquivalence, stepsEquivalence, equivalenceFor,
       dayStreaks, weekStreaks, bestDay, bestPeriod, activeThreshold,
       niceTarget, deriveTarget, goalProgress,
+      timeByActivity, avgHrByActivity, sessionPace, formatPace, paceProgression,
+      bestPaces, activeDays,
       DEFAULT_SETTINGS
     };`, sandbox, { filename: 'app-bundle.js' });
 

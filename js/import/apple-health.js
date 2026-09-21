@@ -47,6 +47,12 @@ const WORKOUT_STAT_FIELDS = {
   HKQuantityTypeIdentifierHeartRate:              'avgHr'
 };
 
+// A heart-rate sample records a reading, not a span: Apple stores an instant and
+// leaves the duration implied by the gap to the next reading. So each sample's time
+// is the distance to the one after it, capped — beyond a few minutes the wearable
+// was not on a wrist and the gap is absence of data, not a long slow heartbeat.
+const HR_GAP_CAP_MS = 5 * 60 * 1000;
+
 class AppleCollector {
   constructor(opts) {
     const o = opts || {};
@@ -57,6 +63,7 @@ class AppleCollector {
     this.sessions = [];
     this.buckets = new DailyBuckets();
     this.currentWorkout = null;
+    this.lastHr = new Map();   // source label -> the previous reading, awaiting its span
     this.meta = { exportDate: null, locale: null };
     this.tally = { records: 0, workouts: 0, types: Object.create(null),
                    sources: Object.create(null), from: null, to: null };
@@ -120,6 +127,11 @@ class AppleCollector {
     const source = this._source(attrs);
     const label = sourceLabel(source);
 
+    if (type === 'HKQuantityTypeIdentifierHeartRate') {
+      this._heartRate(attrs, start, end, source, label);
+      return;
+    }
+
     if (type === 'HKCategoryTypeIdentifierSleepAnalysis') {
       // Attributed to the WAKE day: a night that starts Friday 23:30 and ends
       // Saturday 07:00 is Saturday's sleep, which is how anyone reading it thinks.
@@ -139,6 +151,36 @@ class AppleCollector {
     let value = Number(attrs.value);
     if (spec.convert === 'mass') value = toKg(value, attrs.unit);
     this._add(spec.metric, dateKey, source, value, spec.agg, start.ms);
+  }
+
+  // Time spent in each heart-rate band, accumulated per day.
+  //
+  // Readings are held back by one: a sample's duration only becomes known when the
+  // next one arrives. Tracked per source, because an Apple Watch and a relayed Fitbit
+  // interleave in the file and treating them as one stream would invent gaps.
+  _heartRate(attrs, start, end, source, label) {
+    const bpm = Number(attrs.value);
+    const dateKey = localDateOf(start.ms, start.offsetMin);
+    this._note('HKQuantityTypeIdentifierHeartRate', dateKey, label, attrs.unit);
+    if (!isFinite(bpm) || bpm <= 0) return;
+
+    const previous = this.lastHr.get(label);
+    this.lastHr.set(label, { ms: start.ms, bpm, dateKey, offsetMin: start.offsetMin });
+    if (!this.collect) return;
+
+    // Some sources write a real interval rather than an instant; trust it when given.
+    const ownSpan = end && end.ms > start.ms ? Math.min(end.ms - start.ms, HR_GAP_CAP_MS) : 0;
+    if (ownSpan > 0) {
+      this._add(hrBandMetric(hrBandFor(bpm)), dateKey, source, ownSpan / 1000, 'sum', start.ms);
+      return;
+    }
+
+    if (!previous) return;
+    const gap = start.ms - previous.ms;
+    // Out-of-order records would otherwise contribute negative time.
+    if (gap <= 0) return;
+    this._add(hrBandMetric(hrBandFor(previous.bpm)), previous.dateKey, source,
+              Math.min(gap, HR_GAP_CAP_MS) / 1000, 'sum', previous.ms);
   }
 
   _startWorkout(attrs) {

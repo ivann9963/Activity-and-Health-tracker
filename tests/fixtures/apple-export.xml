@@ -35,6 +35,17 @@
  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Ivan&apos;s Apple Watch" value="HKCategoryValueSleepAnalysisAwake" startDate="2024-03-12 03:10:00 +0200" endDate="2024-03-12 03:25:00 +0200"/>
  <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Ivan&apos;s Apple Watch" value="HKCategoryValueSleepAnalysisAsleepREM" startDate="2024-03-12 03:25:00 +0200" endDate="2024-03-12 06:25:00 +0200"/>
 
+ <!-- Heart rate during the evening run. Apple stores an instant per reading and
+      leaves the duration implied by the gap to the next one, so each sample's span is
+      only known once the following sample arrives. The last reading of a stream never
+      gets a span at all, which is correct: nothing says how long it lasted.
+      The 18:04 -> 19:00 gap is 56 minutes and must be capped, not counted. -->
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:00:00 +0200" startDate="2024-03-12 18:00:00 +0200" endDate="2024-03-12 18:00:00 +0200" value="140"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:01:00 +0200" startDate="2024-03-12 18:01:00 +0200" endDate="2024-03-12 18:01:00 +0200" value="150"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:03:00 +0200" startDate="2024-03-12 18:03:00 +0200" endDate="2024-03-12 18:03:00 +0200" value="165"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:04:00 +0200" startDate="2024-03-12 18:04:00 +0200" endDate="2024-03-12 18:04:00 +0200" value="175"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 19:00:00 +0200" startDate="2024-03-12 19:00:00 +0200" endDate="2024-03-12 19:00:00 +0200" value="90"/>
+
  <!-- A record type the app does not store, but the Inspector must still report. -->
  <Record type="HKQuantityTypeIdentifierEnvironmentalAudioExposure" sourceName="Ivan&apos;s Apple Watch" unit="dBASPL" startDate="2024-03-12 10:00:00 +0200" endDate="2024-03-12 10:05:00 +0200" value="68"/>
 

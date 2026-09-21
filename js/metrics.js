@@ -56,6 +56,36 @@ const METRICS = {
   }
 };
 
+// Heart-rate bands. Time spent in each is stored per day like any other daily figure,
+// which means deduplication, rollups and range queries all work on it unchanged.
+//
+// Bands are exclusive rather than cumulative, so "time above 140" is the sum of every
+// band from 140 up. Storing "over 120", "over 140" and so on directly would overlap,
+// and overlapping figures cannot be added.
+const HR_BANDS = [0, 100, 120, 140, 160, 180];
+
+function hrBandMetric(floor) { return 'hr_band_' + floor; }
+
+function hrBandFor(bpm) {
+  let band = HR_BANDS[0];
+  for (const floor of HR_BANDS) if (bpm >= floor) band = floor;
+  return band;
+}
+
+function hrBandLabel(floor) {
+  const i = HR_BANDS.indexOf(floor);
+  const next = HR_BANDS[i + 1];
+  return next ? `${floor}–${next - 1} bpm` : `${floor}+ bpm`;
+}
+
+for (const floor of HR_BANDS) {
+  METRICS[hrBandMetric(floor)] = {
+    label: hrBandLabel(floor), icon: '❤️', kind: 'total', from: 'daily',
+    unit: 's', display: 'duration', dayAgg: 'sum', periodAgg: 'sum', goalable: false,
+    hrBand: floor
+  };
+}
+
 // The order metrics appear in the dashboard and year review.
 const METRIC_ORDER = ['distance_run', 'time_gym', 'distance_swim', 'steps',
                       'time_racket', 'distance_cycle', 'sleep', 'weight', 'resting_hr'];
@@ -132,5 +162,6 @@ function formatMetricAxis(metricId, value) {
 
 if (typeof module !== 'undefined') {
   module.exports = { METRICS, METRIC_ORDER, metricIds, visibleMetricIds,
-                     aggregate, formatMetric, formatMetricAxis };
+                     aggregate, formatMetric, formatMetricAxis,
+                     HR_BANDS, hrBandMetric, hrBandFor, hrBandLabel };
 }
