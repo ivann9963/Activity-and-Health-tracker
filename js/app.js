@@ -8,6 +8,7 @@ function boot() {
     .then(settings => {
       document.documentElement.dataset.theme = settings.theme || 'dark';
       renderCurrentView();
+      initPWA();
     })
     .catch(err => {
       console.error(err);

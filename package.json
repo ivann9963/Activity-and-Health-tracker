@@ -2,10 +2,12 @@
   "name": "activity-tracker",
   "version": "0.1.0",
   "private": true,
-  "description": "Personal activity ledger — static offline-first PWA (vanilla HTML/CSS/JS, no build step).",
+  "description": "Personal activity ledger \u2014 static offline-first PWA (vanilla HTML/CSS/JS, no build step).",
   "scripts": {
     "test": "node tests/run.js",
     "test:ui": "node tests/ui-smoke.mjs",
+    "test:ui:build": "SMOKE_ROOT=_site node tests/ui-smoke.mjs",
+    "build": "node tools/build.js",
     "serve": "python3 -m http.server 8000"
   },
   "devDependencies": {

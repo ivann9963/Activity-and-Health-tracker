@@ -1,0 +1,39 @@
+# Runs on every push and pull request. The unit tests need nothing but Node; the smoke
+# test drives the real UI in Chromium, and runs twice — once against the source tree
+# and once against the built output, because a build that drops a file or breaks the
+# service worker would pass every other check.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: UI smoke test (source)
+        run: npm run test:ui
+
+      - name: UI smoke test (built output)
+        run: npm run test:ui:build

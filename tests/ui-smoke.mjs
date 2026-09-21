@@ -9,7 +9,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// By default the source tree is served. Point SMOKE_ROOT at _site to run the same
+// checks against the built output instead — which is what actually gets deployed,
+// service worker and all.
+const ROOT = path.resolve(REPO, process.env.SMOKE_ROOT || '.');
+const AGAINST_BUILD = ROOT !== REPO;
 const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript',
                 '.webmanifest': 'application/manifest+json', '.xml': 'text/xml' };
 
@@ -43,7 +48,7 @@ page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', e => errors.push(String(e)));
 
 try {
-  console.log('\n\x1b[1mUI smoke test\x1b[0m');
+  console.log(`\n\x1b[1mUI smoke test\x1b[0m ${AGAINST_BUILD ? '(against the build)' : '(against the source tree)'}`);
   await page.goto(base, { waitUntil: 'networkidle' });
 
   const tabs = await page.locator('.nav-btn').allTextContents();
@@ -60,7 +65,7 @@ try {
   check('the call to action reaches the Data screen', true);
 
   // Feed the real fixture through the real file input.
-  await page.locator('#file-input').setInputFiles(path.join(ROOT, 'tests/fixtures/apple-export.xml'));
+  await page.locator('#file-input').setInputFiles(path.join(REPO, 'tests/fixtures/apple-export.xml'));
   await page.waitForSelector('#inspection-result .card', { timeout: 20000 });
 
   const body = await page.locator('#inspection-result').innerText();
@@ -91,7 +96,7 @@ try {
   // worker, the Fitbit parsers, and reconciliation against what Apple already gave us.
   await page.locator('.nav-btn:has-text("Data")').click();
   await page.waitForSelector('#dropzone');
-  await page.locator('#file-input').setInputFiles(path.join(ROOT, 'tests/fixtures/takeout-sample.zip'));
+  await page.locator('#file-input').setInputFiles(path.join(REPO, 'tests/fixtures/takeout-sample.zip'));
   await page.waitForSelector('#inspection-result .card', { timeout: 20000 });
   const takeout = await page.locator('#inspection-result').innerText();
   check('a Takeout archive is recognised as Google Health',
@@ -145,6 +150,16 @@ try {
 
   check('the dashboard has a heading of its own',
     (await page.locator('h1.period-label').innerText()).length > 0);
+
+  if (AGAINST_BUILD) {
+    // The built copy carries a real service worker with a generated precache list.
+    // If it fails to register, the installed app simply will not work offline.
+    const sw = await page.evaluate(async () => {
+      const reg = await navigator.serviceWorker.getRegistration();
+      return reg ? { scope: reg.scope, active: !!(reg.active || reg.installing || reg.waiting) } : null;
+    });
+    check('the service worker registers', sw && sw.active, JSON.stringify(sw));
+  }
 
   check('no console errors anywhere in that run', errors.length === 0, errors.join('\n    '));
 } catch (err) {

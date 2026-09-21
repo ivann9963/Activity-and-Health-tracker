@@ -1,0 +1,72 @@
+# Publishes the app to GitHub Pages after its tests pass.
+#
+# Pages has to be switched on once by hand, in the repository's
+# Settings → Pages, with Source set to "GitHub Actions". Until that is done this
+# workflow will fail at the deploy step with a permissions error.
+name: Deploy
+
+on:
+  push:
+    # The repository's default branch. `main` is listed too so this keeps working if
+    # the branch is ever renamed or merged into one.
+    branches: [claude/upbeat-archimedes-evouv5, main]
+  workflow_dispatch:
+
+# Pages deployment needs an OIDC token to prove the workflow is allowed to publish.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; queue them instead. In-progress runs are not cancelled,
+# so a half-finished deploy cannot leave the site in a broken state.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # Deploying a broken build is worse than not deploying, so the same checks CI
+      # runs gate the publish.
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Set this repository variable to publish to your own domain instead of
+          # the github.io address; it writes the CNAME file the DNS setup needs.
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: UI smoke test (built output)
+        run: npm run test:ui:build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
