@@ -1,0 +1,107 @@
+// === ACTIVITY TAXONOMY ===
+// One canonical vocabulary for "what kind of exercise was this", plus the lookup
+// tables that translate each vendor's own naming into it. Keeping the mapping in a
+// single file means adding a new source is a data change, not a code change.
+
+const ACTIVITIES = {
+  running:    { label: 'Running',       icon: '🏃', tracks: 'distance' },
+  walking:    { label: 'Walking',       icon: '🚶', tracks: 'distance' },
+  cycling:    { label: 'Cycling',       icon: '🚴', tracks: 'distance' },
+  swimming:   { label: 'Swimming',      icon: '🏊', tracks: 'distance' },
+  strength:   { label: 'Gym',           icon: '🏋️', tracks: 'duration' },
+  racket:     { label: 'Racket sports', icon: '🎾', tracks: 'duration' },
+  hiking:     { label: 'Hiking',        icon: '🥾', tracks: 'distance' },
+  rowing:     { label: 'Rowing',        icon: '🚣', tracks: 'distance' },
+  elliptical: { label: 'Elliptical',    icon: '🌀', tracks: 'duration' },
+  hiit:       { label: 'HIIT',          icon: '⚡', tracks: 'duration' },
+  yoga:       { label: 'Yoga',          icon: '🧘', tracks: 'duration' },
+  other:      { label: 'Other',         icon: '💪', tracks: 'duration' }
+};
+
+// Apple's HKWorkoutActivityType values, minus the shared prefix (stripped before
+// lookup). Anything unlisted falls through to 'other' but keeps its raw name on the
+// record, so an unmapped type shows up in the Inspector rather than vanishing.
+const APPLE_ACTIVITY_MAP = {
+  Running: 'running', TrackAndField: 'running',
+  Walking: 'walking',
+  Cycling: 'cycling', Handcycling: 'cycling',
+  Swimming: 'swimming', SwimBikeRun: 'other', WaterFitness: 'swimming',
+  TraditionalStrengthTraining: 'strength', FunctionalStrengthTraining: 'strength',
+  CoreTraining: 'strength', Flexibility: 'strength',
+  // All racket sports collapse into one bucket, as requested — a year total of
+  // "racket sports" is more meaningful than five sparse separate totals.
+  Tennis: 'racket', Squash: 'racket', Badminton: 'racket', TableTennis: 'racket',
+  Racquetball: 'racket', Pickleball: 'racket', Padel: 'racket',
+  Hiking: 'hiking',
+  Rowing: 'rowing',
+  Elliptical: 'elliptical',
+  HighIntensityIntervalTraining: 'hiit',
+  Yoga: 'yoga', MindAndBody: 'yoga'
+};
+
+// Strava's `Activity Type` column in activities.csv is human-readable text.
+const STRAVA_ACTIVITY_MAP = {
+  'run': 'running', 'trail run': 'running', 'treadmill run': 'running', 'virtual run': 'running',
+  'walk': 'walking',
+  'ride': 'cycling', 'virtual ride': 'cycling', 'e-bike ride': 'cycling', 'gravel ride': 'cycling',
+  'swim': 'swimming',
+  'weight training': 'strength', 'workout': 'strength', 'crossfit': 'strength',
+  'tennis': 'racket', 'squash': 'racket', 'badminton': 'racket', 'table tennis': 'racket',
+  'pickleball': 'racket', 'racquetball': 'racket',
+  'hike': 'hiking',
+  'rowing': 'rowing', 'kayaking': 'rowing', 'canoeing': 'rowing',
+  'elliptical': 'elliptical',
+  'hiit': 'hiit',
+  'yoga': 'yoga'
+};
+
+// Fitbit's activity names as returned by the Web API's activity log.
+const FITBIT_ACTIVITY_MAP = {
+  'run': 'running', 'treadmill': 'running', 'jog': 'running',
+  'walk': 'walking', 'outdoor walk': 'walking',
+  'bike': 'cycling', 'outdoor bike': 'cycling', 'spinning': 'cycling',
+  'swim': 'swimming',
+  'weights': 'strength', 'workout': 'strength', 'strength training': 'strength',
+  'circuit training': 'strength', 'bootcamp': 'strength',
+  'tennis': 'racket', 'squash': 'racket', 'badminton': 'racket', 'table tennis': 'racket',
+  'pickleball': 'racket',
+  'hike': 'hiking',
+  'rowing machine': 'rowing',
+  'elliptical': 'elliptical',
+  'interval workout': 'hiit',
+  'yoga': 'yoga'
+};
+
+// Translate a vendor's activity name into our vocabulary. Always returns a valid key.
+function canonicalActivity(vendor, raw) {
+  if (!raw) return 'other';
+  if (vendor === 'apple') {
+    const bare = String(raw).replace(/^HKWorkoutActivityType/, '');
+    return APPLE_ACTIVITY_MAP[bare] || 'other';
+  }
+  const key = String(raw).trim().toLowerCase();
+  if (vendor === 'strava') return STRAVA_ACTIVITY_MAP[key] || 'other';
+  if (vendor === 'fitbit') return FITBIT_ACTIVITY_MAP[key] || 'other';
+  return 'other';
+}
+
+// Two sessions can only be duplicates of each other if their activities are
+// compatible. They need not be identical: Strava logs a pool swim as 'Swim' while
+// Apple may have split it differently, and a gym session is variously 'strength',
+// 'hiit' or 'other' depending on which app recorded it.
+const COMPATIBLE_ACTIVITIES = [
+  ['strength', 'hiit', 'other'],
+  ['running', 'walking'],   // short runs are often auto-detected as walks and vice versa
+  ['cycling', 'other'],
+  ['racket', 'other']
+];
+
+function activitiesCompatible(a, b) {
+  if (a === b) return true;
+  return COMPATIBLE_ACTIVITIES.some(group => group.includes(a) && group.includes(b));
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = { ACTIVITIES, canonicalActivity, activitiesCompatible,
+                     APPLE_ACTIVITY_MAP, STRAVA_ACTIVITY_MAP, FITBIT_ACTIVITY_MAP };
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Activity Ledger",
+  "short_name": "Activity",
+  "description": "A private ledger of everything you have run, lifted, swum and walked.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%230f1115'/%3E%3Ctext x='256' y='360' font-size='280' text-anchor='middle'%3E%F0%9F%8F%83%3C/text%3E%3C/svg%3E",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

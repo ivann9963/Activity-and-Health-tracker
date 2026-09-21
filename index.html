@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A private ledger of everything you have run, lifted, swum and walked.">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Activity Ledger</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏃</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1 class="app-title"><span aria-hidden="true">🏃</span> Activity Ledger</h1>
+</header>
+
+<main id="view-host" class="view-host"><!-- the active view renders here --></main>
+
+<nav id="main-nav" class="main-nav" aria-label="Main"><!-- built from the view registry --></nav>
+
+<div id="toast-host" class="toast-host" role="status" aria-live="polite"></div>
+<div id="dialog-host"></div>
+
+<!-- No build step: plain scripts, loaded in dependency order.
+     config → helpers → storage → UI primitives → views → boot. -->
+<script src="js/config.js"></script>
+<script src="js/dates.js"></script>
+<script src="js/metrics.js"></script>
+<script src="js/activity-types.js"></script>
+<script src="js/records.js"></script>
+<script src="js/db.js"></script>
+<script src="js/ui-components.js"></script>
+<script src="js/routing.js"></script>
+<script src="js/import/zip.js"></script>
+<script src="js/import/csv.js"></script>
+<script src="js/import/normalize.js"></script>
+<script src="js/import/xml-stream.js"></script>
+<script src="js/import/apple-health.js"></script>
+<script src="js/import/sniffer.js"></script>
+<script src="js/import/inspector.js"></script>
+<!-- View registration order sets the order of the tab bar. -->
+<script src="js/dashboard.js"></script>
+<script src="js/import/import-ui.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

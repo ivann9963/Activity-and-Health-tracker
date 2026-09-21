@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE HealthData [
+<!ELEMENT HealthData (ExportDate,Me,(Record|Workout)*)>
+<!ATTLIST HealthData locale CDATA #REQUIRED>
+<!ELEMENT Record ((MetadataEntry)*)>
+]>
+<HealthData locale="en_GB">
+ <ExportDate value="2026-09-20 11:02:19 +0300"/>
+ <Me HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexMale"/>
+
+ <!-- Steps recorded twice for the same day: once by the phone in a pocket, once by
+      the watch. Summing these would be wrong; the dedupe stage elects one. -->
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Ivan&apos;s iPhone" sourceVersion="17.1" device="&lt;&lt;HKDevice: 0x2818&gt;, name:iPhone, manufacturer:Apple Inc., model:iPhone, hardware:iPhone14,2&gt;" unit="count" creationDate="2024-03-12 08:00:00 +0200" startDate="2024-03-12 07:00:00 +0200" endDate="2024-03-12 08:00:00 +0200" value="1200"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Ivan&apos;s iPhone" unit="count" creationDate="2024-03-12 12:00:00 +0200" startDate="2024-03-12 11:00:00 +0200" endDate="2024-03-12 12:00:00 +0200" value="800"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Ivan&apos;s Apple Watch" device="&lt;&lt;HKDevice: 0x9911&gt;, name:Apple Watch, manufacturer:Apple Inc., model:Watch, hardware:Watch6,2&gt;" unit="count" creationDate="2024-03-12 08:00:00 +0200" startDate="2024-03-12 07:00:00 +0200" endDate="2024-03-12 08:00:00 +0200" value="1500"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Ivan&apos;s Apple Watch" unit="count" creationDate="2024-03-12 12:00:00 +0200" startDate="2024-03-12 11:00:00 +0200" endDate="2024-03-12 12:00:00 +0200" value="1100"/>
+
+ <!-- A day after the switch to the Fitbit: the watch is gone, Google Health relays. -->
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Google Health" unit="count" creationDate="2026-07-04 23:00:00 +0300" startDate="2026-07-04 06:00:00 +0300" endDate="2026-07-04 22:00:00 +0300" value="9400"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Ivan&apos;s iPhone" unit="count" creationDate="2026-07-04 23:00:00 +0300" startDate="2026-07-04 06:00:00 +0300" endDate="2026-07-04 22:00:00 +0300" value="6100"/>
+
+ <!-- Weight in two different units, and a same-day re-weigh (the later reading wins). -->
+ <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Withings" unit="kg" creationDate="2024-03-12 07:10:00 +0200" startDate="2024-03-12 07:10:00 +0200" endDate="2024-03-12 07:10:00 +0200" value="81.4"/>
+ <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Withings" unit="kg" creationDate="2024-03-12 21:10:00 +0200" startDate="2024-03-12 21:10:00 +0200" endDate="2024-03-12 21:10:00 +0200" value="82.2"/>
+ <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Withings" unit="lb" creationDate="2024-03-13 07:10:00 +0200" startDate="2024-03-13 07:10:00 +0200" endDate="2024-03-13 07:10:00 +0200" value="180"/>
+
+ <Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 23:00:00 +0200" startDate="2024-03-12 23:00:00 +0200" endDate="2024-03-12 23:00:00 +0200" value="54"/>
+ <Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 23:30:00 +0200" startDate="2024-03-12 23:30:00 +0200" endDate="2024-03-12 23:30:00 +0200" value="56"/>
+
+ <!-- Sleep starting the previous evening: belongs to the WAKE day, 2024-03-12.
+      InBed and Awake must not count towards the total. -->
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Ivan&apos;s Apple Watch" value="HKCategoryValueSleepAnalysisInBed" startDate="2024-03-11 22:50:00 +0200" endDate="2024-03-12 06:30:00 +0200"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Ivan&apos;s Apple Watch" value="HKCategoryValueSleepAnalysisAsleepCore" startDate="2024-03-11 23:10:00 +0200" endDate="2024-03-12 02:10:00 +0200"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Ivan&apos;s Apple Watch" value="HKCategoryValueSleepAnalysisAsleepDeep" startDate="2024-03-12 02:10:00 +0200" endDate="2024-03-12 03:10:00 +0200"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Ivan&apos;s Apple Watch" value="HKCategoryValueSleepAnalysisAwake" startDate="2024-03-12 03:10:00 +0200" endDate="2024-03-12 03:25:00 +0200"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Ivan&apos;s Apple Watch" value="HKCategoryValueSleepAnalysisAsleepREM" startDate="2024-03-12 03:25:00 +0200" endDate="2024-03-12 06:25:00 +0200"/>
+
+ <!-- A record type the app does not store, but the Inspector must still report. -->
+ <Record type="HKQuantityTypeIdentifierEnvironmentalAudioExposure" sourceName="Ivan&apos;s Apple Watch" unit="dBASPL" startDate="2024-03-12 10:00:00 +0200" endDate="2024-03-12 10:05:00 +0200" value="68"/>
+
+ <!-- Modern workout: totals live in nested WorkoutStatistics. -->
+ <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="32.5" durationUnit="min" sourceName="Ivan&apos;s Apple Watch" device="&lt;&lt;HKDevice: 0x9911&gt;, name:Apple Watch, manufacturer:Apple Inc.&gt;" startDate="2024-03-12 18:00:00 +0200" endDate="2024-03-12 18:32:30 +0200">
+  <WorkoutStatistics type="HKQuantityTypeIdentifierDistanceWalkingRunning" startDate="2024-03-12 18:00:00 +0200" endDate="2024-03-12 18:32:30 +0200" sum="6.2" unit="km"/>
+  <WorkoutStatistics type="HKQuantityTypeIdentifierActiveEnergyBurned" sum="410" unit="Cal"/>
+  <WorkoutStatistics type="HKQuantityTypeIdentifierHeartRate" average="156.4" minimum="98" maximum="178" unit="count/min"/>
+  <MetadataEntry key="HKIndoorWorkout" value="0"/>
+ </Workout>
+
+ <!-- The SAME run, relayed from Strava a minute later and a few metres different.
+      This is the canonical duplicate the session matcher has to catch. -->
+ <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="32.4" durationUnit="min" sourceName="Strava" startDate="2024-03-12 18:00:35 +0200" endDate="2024-03-12 18:32:59 +0200">
+  <WorkoutStatistics type="HKQuantityTypeIdentifierDistanceWalkingRunning" sum="6.18" unit="km"/>
+ </Workout>
+
+ <!-- Legacy workout: totals as attributes on the element itself, in miles. -->
+ <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="45" durationUnit="min" totalDistance="5.2" totalDistanceUnit="mi" totalEnergyBurned="520" totalEnergyBurnedUnit="Cal" sourceName="Ivan&apos;s iPhone" startDate="2019-06-01 09:00:00 +0300" endDate="2019-06-01 09:45:00 +0300"/>
+
+ <Workout workoutActivityType="HKWorkoutActivityTypeTennis" duration="90" durationUnit="min" sourceName="Ivan&apos;s Apple Watch" startDate="2024-03-14 17:00:00 +0200" endDate="2024-03-14 18:30:00 +0200"/>
+ <Workout workoutActivityType="HKWorkoutActivityTypeTraditionalStrengthTraining" duration="62" durationUnit="min" sourceName="Ivan&apos;s Apple Watch" startDate="2024-03-15 07:30:00 +0200" endDate="2024-03-15 08:32:00 +0200"/>
+ <Workout workoutActivityType="HKWorkoutActivityTypeSwimming" duration="40" durationUnit="min" sourceName="Ivan&apos;s Apple Watch" startDate="2024-03-16 12:00:00 +0200" endDate="2024-03-16 12:40:00 +0200">
+  <WorkoutStatistics type="HKQuantityTypeIdentifierDistanceSwimming" sum="1500" unit="m"/>
+ </Workout>
+</HealthData>
