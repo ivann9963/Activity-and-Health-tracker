@@ -55,7 +55,7 @@ class AppleCollector {
     this.importedAt = o.importedAt || Date.now();
 
     this.sessions = [];
-    this.buckets = new Map();   // "metric|date|source" -> accumulator
+    this.buckets = new DailyBuckets();
     this.currentWorkout = null;
     this.meta = { exportDate: null, locale: null };
     this.tally = { records: 0, workouts: 0, types: Object.create(null),
@@ -81,19 +81,9 @@ class AppleCollector {
     if (unit) t.units[unit] = (t.units[unit] || 0) + 1;
   }
 
-  // --- daily accumulation --------------------------------------------------------
-  // Values are folded in as they arrive rather than collected into arrays: a decade of
-  // step samples is millions of numbers, and we only ever need their sum.
   _add(metric, localDate, source, value, agg, at) {
-    if (!this.collect || value == null || !isFinite(value)) return;
-    const key = metric + '|' + localDate + '|' + sourceLabel(source);
-    let b = this.buckets.get(key);
-    if (!b) {
-      b = { metric, localDate, source, agg, sum: 0, count: 0, last: null, lastAt: -Infinity };
-      this.buckets.set(key, b);
-    }
-    b.sum += value; b.count++;
-    if (at >= b.lastAt) { b.last = value; b.lastAt = at; }
+    if (!this.collect) return;
+    this.buckets.add(metric, localDate, source, value, agg, at);
   }
 
   _source(attrs) {
@@ -201,17 +191,12 @@ class AppleCollector {
 
   // --- output ---------------------------------------------------------------------
   finish() {
-    const daily = [];
-    for (const b of this.buckets.values()) {
-      const value = b.agg === 'sum' ? b.sum
-                  : b.agg === 'avg' ? b.sum / b.count
-                  : b.last;
-      if (value == null || !isFinite(value)) continue;
-      daily.push(makeDaily({ metric: b.metric, localDate: b.localDate, value,
-                             source: b.source, importBatch: this.importBatch,
-                             importedAt: this.importedAt }));
-    }
-    return { sessions: this.sessions, daily, tally: this.tally, meta: this.meta };
+    return {
+      sessions: this.sessions,
+      daily: this.buckets.toRecords(this.importBatch, this.importedAt),
+      tally: this.tally,
+      meta: this.meta
+    };
   }
 }
 

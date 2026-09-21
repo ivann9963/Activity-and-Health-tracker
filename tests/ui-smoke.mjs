@@ -86,6 +86,32 @@ try {
   await page.locator('.segmented button:has-text("Year")').click();
   await page.waitForSelector('.metric-grid');
 
+  // --- second source: a Google Health (Fitbit) Takeout archive ---
+  // This exercises the whole second pipeline in a real browser: zip walking, the
+  // worker, the Fitbit parsers, and reconciliation against what Apple already gave us.
+  await page.locator('.nav-btn:has-text("Data")').click();
+  await page.waitForSelector('#dropzone');
+  await page.locator('#file-input').setInputFiles(path.join(ROOT, 'tests/fixtures/takeout-sample.zip'));
+  await page.waitForSelector('#inspection-result .card', { timeout: 20000 });
+  const takeout = await page.locator('#inspection-result').innerText();
+  check('a Takeout archive is recognised as Google Health',
+    /Google Health \(Fitbit\)/.test(takeout), takeout.slice(0, 200));
+  check('its folders are listed with what they feed',
+    /Physical Activity/.test(takeout) && /workouts/.test(takeout), takeout.slice(0, 400));
+
+  await page.locator('#do-import').click();
+  await page.waitForFunction(
+    () => document.querySelectorAll('.list-row').length === 2, null, { timeout: 30000 });
+  check('both sources now appear in the import history', true);
+
+  await page.locator('.nav-btn:has-text("Home")').click();
+  await page.waitForSelector('.metric-grid');
+  await page.locator('.segmented button:has-text("Year")').click();
+  await page.waitForSelector('.metric-grid');
+  const combined = await page.locator('#view-host').innerText();
+  check('Fitbit data reaches the totals', /Racket|Tennis|RACKET/i.test(combined),
+    combined.slice(0, 300));
+
   await page.locator('.nav-btn:has-text("Data")').click();
   await page.waitForSelector('button:has-text("Review the decisions")', { timeout: 10000 });
   check('the Data screen reports what reconciliation did', true);

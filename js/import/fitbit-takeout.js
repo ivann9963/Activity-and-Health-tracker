@@ -100,6 +100,22 @@ function truncateValues(obj) {
   return out;
 }
 
+// What a folder's files will feed, decided by the same classifier the importer uses so
+// the report cannot promise something the import then ignores.
+const FITBIT_KIND_METRIC = {
+  steps: 'steps', resting_hr: 'resting_hr', sleep: 'sleep',
+  weight: 'weight', exercise: 'workouts'
+};
+
+function folderMetric(folder) {
+  const kinds = new Set();
+  for (const f of folder.files) {
+    const k = classifyFitbitFile(f.name);
+    if (k && k !== 'ignore') kinds.add(FITBIT_KIND_METRIC[k]);
+  }
+  return kinds.size ? [...kinds].join(', ') : null;
+}
+
 // Full inspection of a Takeout archive: what is in it, how far back it goes, and the
 // real shape of each kind of file.
 function inspectTakeout(file, entries) {
@@ -130,12 +146,109 @@ function inspectTakeout(file, entries) {
           from: f.from, to: f.to,
           sources: [{ name: 'Google Health (Fitbit)', count: f.files.length }],
           units: [],
-          // Nothing is importable from a Takeout archive yet — the point of this pass
-          // is to learn the schema so the parser can be written against reality.
-          mapped: null,
+          mapped: folderMetric(f),
           sample: f.sample
         })),
         takeout: true
       };
     });
+}
+
+// === IMPORTING A TAKEOUT ARCHIVE ===================================================
+// Walks the archive one file at a time. Sequential rather than parallel on purpose:
+// a Takeout export can hold thousands of files, and inflating them all at once would
+// spike memory for no gain, since the work is I/O-bound on one zip anyway.
+
+function createFitbitCollector(batch, importedAt) {
+  const buckets = new DailyBuckets();
+  const sessions = [];
+  const notes = Object.create(null);
+  const source = { vendor: 'fitbit', app: 'Google Health', device: 'Fitbit' };
+
+  return {
+    buckets, sessions, notes,
+    addDaily(metric, localDate, value, agg, at) {
+      buckets.add(metric, localDate, source, value, agg, at);
+    },
+    addSession(raw) {
+      sessions.push(makeSession({ ...raw, importBatch: batch, importedAt }));
+    },
+    note(key) { notes[key] = (notes[key] || 0) + 1; },
+    finish() {
+      return { sessions, daily: buckets.toRecords(batch, importedAt), notes };
+    }
+  };
+}
+
+function importTakeout(file, entries, opts) {
+  const o = opts || {};
+  const batch = o.importBatch || null;
+  const importedAt = o.importedAt || Date.now();
+  const collector = createFitbitCollector(batch, importedAt);
+
+  // The account's weight unit is stated only in the profile export, so find it first.
+  const profile = entries.find(e => /Your Profile\/.*\.csv$/i.test(e.name));
+  const unitPromise = profile
+    ? zipEntryText(file, profile).then(fitbitWeightUnit).catch(() => null)
+    : Promise.resolve(null);
+
+  return unitPromise.then(weightUnit => {
+    const work = [];
+    const skipped = Object.create(null);
+    for (const e of entries) {
+      if (!TAKEOUT_ROOT_RE.test(e.name)) continue;
+      const kind = classifyFitbitFile(e.name);
+      if (!kind || kind === 'ignore') {
+        if (/\.json$/i.test(e.name)) skipped[kind || 'unrecognised'] =
+          (skipped[kind || 'unrecognised'] || 0) + 1;
+        continue;
+      }
+      if (kind === 'weight' && !weightUnit) { collector.note('weight-unit-unknown'); continue; }
+      work.push({ entry: e, kind });
+    }
+
+    let done = 0, failed = 0;
+    const step = () => {
+      if (!work.length) return Promise.resolve();
+      const job = work.shift();
+      return zipEntryText(file, job.entry)
+        .then(text => {
+          const data = JSON.parse(text);
+          if (job.kind === 'weight') parseFitbitWeight(data, collector, weightUnit);
+          else FITBIT_PARSERS[job.kind](data, collector);
+        })
+        .catch(err => {
+          // One malformed file must not abandon an import of thousands. Count it,
+          // report it at the end, carry on.
+          failed++;
+          collector.note('unreadable:' + job.kind);
+          console.warn('[takeout] skipped', job.entry.name, err.message);
+        })
+        .then(() => {
+          done++;
+          if (o.onProgress && done % 10 === 0) o.onProgress(done, done + work.length);
+          return step();
+        });
+    };
+
+    return step().then(() => {
+      const res = collector.finish();
+      const dates = res.daily.map(d => d.localDate).concat(res.sessions.map(s => s.localDate));
+      dates.sort();
+      return {
+        sessions: res.sessions,
+        daily: res.daily,
+        meta: { weightUnit, filesRead: done, filesFailed: failed, skipped },
+        tally: {
+          records: res.daily.length,
+          workouts: res.sessions.length,
+          from: dates[0] || null,
+          to: dates[dates.length - 1] || null,
+          sources: { Fitbit: res.daily.length + res.sessions.length },
+          types: {},
+          notes: res.notes
+        }
+      };
+    });
+  });
 }

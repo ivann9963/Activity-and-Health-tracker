@@ -15,11 +15,14 @@ importScripts(
   '../import/normalize.js',
   '../import/zip.js',
   '../import/xml-stream.js',
-  '../import/apple-health.js'
+  '../import/apple-health.js',
+  '../import/csv.js',
+  '../import/fitbit-parse.js',
+  '../import/fitbit-takeout.js'
 );
 
 self.onmessage = function (ev) {
-  const { file, kind, entry, batch } = ev.data;
+  const { file, kind, entry, entries, batch } = ev.data;
 
   // Progress is throttled here rather than in the page: posting a message per chunk
   // would flood the main thread with exactly the work we moved off it.
@@ -31,8 +34,17 @@ self.onmessage = function (ev) {
     self.postMessage({ type: 'progress', bytes });
   };
 
-  openStream(file, kind, entry)
-    .then(stream => scanAppleExport(stream, { collect: true, importBatch: batch, onProgress }))
+  // A Takeout archive is thousands of small files rather than one huge one, so it
+  // reports progress by file count and its own walker handles the streaming.
+  const parse = kind === 'fitbit-zip'
+    ? importTakeout(file, entries, {
+        importBatch: batch,
+        onProgress: (done, total) => self.postMessage({ type: 'progress', done, total })
+      })
+    : openStream(file, kind, entry)
+        .then(stream => scanAppleExport(stream, { collect: true, importBatch: batch, onProgress }));
+
+  parse
     .then(res => {
       self.postMessage({
         type: 'done',
@@ -40,7 +52,7 @@ self.onmessage = function (ev) {
         daily: res.daily,
         tally: res.tally,
         meta: res.meta,
-        bytes: res.bytes
+        bytes: res.bytes || 0
       });
     })
     .catch(err => {

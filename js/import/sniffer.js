@@ -66,7 +66,8 @@ function sniffText(text, file) {
 }
 
 // Kinds the importer knows how to act on, as opposed to merely recognise.
-const IMPORTABLE_KINDS = ['apple-zip', 'apple-xml', 'strava-zip', 'strava-csv', 'app-backup'];
+const IMPORTABLE_KINDS = ['apple-zip', 'apple-xml', 'fitbit-zip', 'strava-zip',
+                          'strava-csv', 'app-backup'];
 
 function humanSize(bytes) {
   if (bytes < 1024) return bytes + ' B';

@@ -15,35 +15,53 @@ function importFile(file, callbacks) {
     if (IMPORTABLE_KINDS.indexOf(sniff.kind) === -1) {
       throw new Error(`${sniff.label} cannot be imported yet.`);
     }
-    if (sniff.kind !== 'apple-zip' && sniff.kind !== 'apple-xml') {
-      throw new Error(`${sniff.label} support is not finished yet — for now, import your ` +
-                      `Apple Health export.`);
+    // Recognised but not yet wired up. Saying so plainly beats letting the file reach
+    // a parser that cannot read it and surfacing whatever error that produces.
+    const NOT_YET = {
+      'strava-zip': 'Strava import', 'strava-csv': 'Strava import',
+      'app-backup': 'Restoring from a backup'
+    };
+    if (NOT_YET[sniff.kind]) {
+      throw new Error(`${NOT_YET[sniff.kind]} is not finished yet — for now, import your ` +
+                      `Apple Health or Google Health export.`);
     }
     const batch = newBatchId();
     stage('Reading the file');
-    return parseApple(file, sniff, batch, cb.onProgress)
-      .then(res => {
-        stage('Saving');
-        return storeBatch(file, sniff, batch, res, stage);
-      });
+
+    return parseInWorker(file, sniff, batch, cb).then(res => {
+      stage('Saving');
+      return storeBatch(file, sniff, batch, res, stage);
+    });
   });
 }
 
-// Parse in a worker, falling back to the main thread if one cannot be created —
-// which happens on a file:// origin, and in a few locked-down browser configurations.
-// A frozen tab beats no import at all.
-function parseApple(file, sniff, batch, onProgress) {
+// Parse in a worker, falling back to the main thread if one cannot be created — which
+// happens on a file:// origin and in a few locked-down browser configurations. A
+// briefly frozen tab beats no import at all.
+//
+// Both shapes of export go through here: one enormous XML file, or a Takeout archive
+// of thousands of small ones. The second is the reason this is not optional — each of
+// those files needs inflating, and doing that on the UI thread makes the progress bar
+// stutter for the whole import.
+function parseInWorker(file, sniff, batch, cb) {
+  const onProgress = cb.onProgress;
+  const onStage = cb.onStage;
+
   return new Promise((resolve, reject) => {
     let worker;
     try {
       worker = new Worker('js/workers/import-worker.js');
     } catch (err) {
       console.warn('Worker unavailable, parsing on the main thread:', err);
-      return resolve(parseAppleInline(file, sniff, batch, onProgress));
+      return resolve(parseInline(file, sniff, batch, cb));
     }
     worker.onmessage = ev => {
       const msg = ev.data;
-      if (msg.type === 'progress') { if (onProgress) onProgress(msg.bytes); return; }
+      if (msg.type === 'progress') {
+        if (msg.total != null) { if (onStage) onStage(`Reading files (${msg.done} of ${msg.total})`); }
+        else if (onProgress) onProgress(msg.bytes);
+        return;
+      }
       worker.terminate();
       if (msg.type === 'error') reject(new Error(msg.message));
       else resolve(msg);
@@ -53,15 +71,23 @@ function parseApple(file, sniff, batch, onProgress) {
       // An error event here usually means importScripts failed (a path problem or an
       // offline cache miss), so retrying inline is worth a try before giving up.
       console.warn('Worker failed, parsing on the main thread:', err.message);
-      resolve(parseAppleInline(file, sniff, batch, onProgress));
+      resolve(parseInline(file, sniff, batch, cb));
     };
-    worker.postMessage({ file, kind: sniff.kind, entry: sniff.entry || null, batch });
+    worker.postMessage({ file, kind: sniff.kind, entry: sniff.entry || null,
+                         entries: sniff.entries || null, batch });
   });
 }
 
-function parseAppleInline(file, sniff, batch, onProgress) {
+function parseInline(file, sniff, batch, cb) {
+  if (sniff.kind === 'fitbit-zip') {
+    return importTakeout(file, sniff.entries, {
+      importBatch: batch,
+      onProgress: (done, total) => cb.onStage && cb.onStage(`Reading files (${done} of ${total})`)
+    });
+  }
   return appleXmlStream(file, sniff)
-    .then(stream => scanAppleExport(stream, { collect: true, importBatch: batch, onProgress }));
+    .then(stream => scanAppleExport(stream, { collect: true, importBatch: batch,
+                                              onProgress: cb.onProgress }));
 }
 
 // Write in chunks. One transaction for 40,000 records is fine, but chunking keeps
@@ -90,6 +116,7 @@ function storeBatch(file, sniff, batch, res, stage) {
     fileSize: file.size,
     kind: sniff.kind,
     exportDate: res.meta && res.meta.exportDate || null,
+    meta: res.meta || null,
     counts: { sessions: res.sessions.length, daily: res.daily.length,
               records: res.tally.records, workouts: res.tally.workouts },
     range: { from: res.tally.from, to: res.tally.to },

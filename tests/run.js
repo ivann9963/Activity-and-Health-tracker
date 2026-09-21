@@ -550,12 +550,194 @@ async function takeoutTests() {
     eq('CSV files are described too', profile.format, 'csv');
     eq('with their column names', profile.keys, ['full_name', 'date_of_birth']);
 
-    ok('nothing in a Takeout archive is importable yet',
-       rep.types.every(t => t.mapped === null));
+    // The report must promise exactly what the importer will actually do.
+    eq('step files are marked as feeding steps',
+       rep.types.find(t => t.type === 'Global Export Data').mapped, 'steps');
+    eq('exercise files are marked as workouts',
+       rep.types.find(t => t.type === 'Physical Activity').mapped, 'workouts');
+    eq('sleep files are marked as sleep',
+       rep.types.find(t => t.type === 'Sleep').mapped, 'sleep');
+    eq('a profile folder feeds nothing',
+       rep.types.find(t => t.type === 'Your Profile').mapped, null);
 
     const text = app.inspectionReportText(rep);
     ok('the text report carries the schema, which is the point of pasting it back',
        /keys: .*activityName/.test(text), text.slice(0, 600));
+  });
+}
+
+// --- Fitbit parsing -------------------------------------------------------------------
+function fitbitParseTests() {
+  suite('Fitbit dates — wall clock, no timezone anywhere', () => {
+    // Fitbit writes MM/DD/YY with no offset. Read as local wall time, which is the
+    // only reading that keeps a Fitbit run aligned with its Apple Health twin.
+    const d = app.parseFitbitDate('07/04/26 07:30:00');
+    eq('the day is read correctly', d.localDate, '2026-07-04');
+    eq('and it resolves to that local wall time',
+       new Date(d.ms).getHours() + ':' + new Date(d.ms).getMinutes(), '7:30');
+    eq('two-digit years are this century', app.parseFitbitDate('01/02/09').localDate, '2009-01-02');
+    eq('ISO timestamps are accepted too',
+       app.parseFitbitDate('2026-07-04T23:30:00.000').localDate, '2026-07-04');
+    eq('a bare ISO date works', app.parseFitbitDate('2026-07-04').localDate, '2026-07-04');
+    eq('nonsense yields null', app.parseFitbitDate('not a date'), null);
+    eq('so does nothing at all', app.parseFitbitDate(''), null);
+  });
+
+  suite('Fitbit file classification', () => {
+    eq('steps', app.classifyFitbitFile('Takeout/Fitbit/Global Export Data/steps-2026-07-01.json'), 'steps');
+    eq('exercise', app.classifyFitbitFile('Takeout/Fitbit/Physical Activity/exercise-0.json'), 'exercise');
+    eq('sleep', app.classifyFitbitFile('Takeout/Fitbit/Sleep/sleep-2026-07-01.json'), 'sleep');
+    // The specific pattern must beat the broad one, or every heart-rate file would be
+    // read as a resting-heart-rate file and vice versa.
+    eq('resting heart rate is not plain heart rate',
+       app.classifyFitbitFile('Global Export Data/resting_heart_rate-2026-07-01.json'), 'resting_hr');
+    eq('per-second heart rate is skipped on purpose',
+       app.classifyFitbitFile('Global Export Data/heart_rate-2026-07-01.json'), 'ignore');
+    eq('non-JSON is not classified', app.classifyFitbitFile('Your Profile/Profile.csv'), null);
+  });
+
+  suite('Fitbit record parsing', () => {
+    const out = app.createFitbitCollector('b1', 1000);
+
+    // Intraday buckets fold into days; a file may hold a day or a month, so the day
+    // comes from each entry rather than from the file name.
+    app.parseFitbitSteps([
+      { dateTime: '07/04/26 08:00:00', value: '520' },
+      { dateTime: '07/04/26 08:01:00', value: '480' },
+      { dateTime: '07/05/26 09:00:00', value: '1000' }
+    ], out);
+
+    app.parseFitbitRestingHr([
+      { dateTime: '07/04/26', value: { date: '07/04/26', value: 58.0, error: 6.0 } },
+      { dateTime: '07/05/26', value: 60 }
+    ], out);
+
+    app.parseFitbitSleep([
+      { dateOfSleep: '2026-07-04', startTime: '2026-07-03T23:30:00.000',
+        endTime: '2026-07-04T07:00:00.000', duration: 27000000, minutesAsleep: 420 },
+      { dateOfSleep: '2026-07-05', startTime: '2026-07-04T23:00:00.000',
+        endTime: '2026-07-05T06:00:00.000', minutesAsleep: 0 }
+    ], out);
+
+    app.parseFitbitExercise([
+      { logId: 1, activityName: 'Run', startTime: '07/04/26 07:30:00',
+        duration: 1900000, activeDuration: 1800000, distance: 5.2,
+        distanceUnit: 'Kilometer', calories: 410, averageHeartRate: 156.7 },
+      { logId: 2, activityName: 'Tennis', startTime: '07/06/26 17:00:00',
+        duration: 5400000, calories: 600 }
+    ], out);
+
+    const res = out.finish();
+    const day = (metric, date) => res.daily.find(d => d.metric === metric && d.localDate === date);
+
+    eq('step buckets sum into a day', day('steps', '2026-07-04').value, 1000);
+    eq('a second day stays separate', day('steps', '2026-07-05').value, 1000);
+    eq('resting heart rate unwraps the nested value object',
+       day('resting_hr', '2026-07-04').value, 58);
+    eq('…and accepts the plain form too', day('resting_hr', '2026-07-05').value, 60);
+    eq('sleep uses Fitbit\'s own wake-day label', day('sleep', '2026-07-04').value, 420);
+    eq('a night with no sleep recorded is not stored', day('sleep', '2026-07-05'), undefined);
+
+    eq('two workouts', res.sessions.length, 2);
+    const run = res.sessions.find(s => s.rawActivity === 'Run');
+    eq('activeDuration wins over duration, since it excludes pauses', run.durationSec, 1800);
+    close('distance is converted to metres', run.distanceM, 5200);
+    eq('heart rate is rounded', run.avgHr, 157);
+    eq('the activity is canonicalised', run.activity, 'running');
+    eq('and it is attributed to Fitbit', app.sourceLabel(run.source), 'Fitbit');
+    eq('tennis lands in racket sports',
+       res.sessions.find(s => s.rawActivity === 'Tennis').activity, 'racket');
+    eq('a workout without a distance keeps null rather than zero',
+       res.sessions.find(s => s.rawActivity === 'Tennis').distanceM, null);
+  });
+
+  suite('Fitbit weight — never guess the unit', () => {
+    const noUnit = app.createFitbitCollector('b', 1);
+    app.parseFitbitWeight([{ weight: 180, date: '07/04/26', time: '07:00:00' }], noUnit, null);
+    const r = noUnit.finish();
+    eq('without a stated unit nothing is stored', r.daily.length, 0);
+    eq('and the reason is recorded', r.notes['weight-unit-unknown'], 1);
+
+    const lbs = app.createFitbitCollector('b', 1);
+    app.parseFitbitWeight([{ weight: 180, date: '07/04/26', time: '07:00:00' }], lbs, 'lb');
+    close('pounds convert', lbs.finish().daily[0].value, 81.6466, 0.001);
+
+    eq('the profile states the unit',
+       app.fitbitWeightUnit('full_name,weight_unit\nIvan,POUND\n'), 'lb');
+    eq('metric profiles too',
+       app.fitbitWeightUnit('full_name,weight_unit\nIvan,KILOGRAM\n'), 'kg');
+    eq('an absent column yields null',
+       app.fitbitWeightUnit('full_name\nIvan\n'), null);
+  });
+}
+
+async function fitbitImportTests() {
+  const zip = namedBlob(await makeZip({
+    'Takeout/Fitbit/Global Export Data/steps-2026-07-01.json':
+      JSON.stringify([{ dateTime: '07/04/26 08:00:00', value: '5200' },
+                      { dateTime: '07/04/26 09:00:00', value: '4200' }]),
+    'Takeout/Fitbit/Global Export Data/resting_heart_rate-2026-07-01.json':
+      JSON.stringify([{ dateTime: '07/04/26', value: { value: 58.0 } }]),
+    // Deliberately present and deliberately skipped: per-second heart rate is enormous
+    // and feeds nothing the app shows.
+    'Takeout/Fitbit/Global Export Data/heart_rate-2026-07-04.json':
+      JSON.stringify([{ dateTime: '07/04/26 08:00:00', value: { bpm: 90, confidence: 2 } }]),
+    'Takeout/Fitbit/Sleep/sleep-2026-07-01.json':
+      JSON.stringify([{ dateOfSleep: '2026-07-04', endTime: '2026-07-04T07:00:00.000',
+                        minutesAsleep: 431 }]),
+    'Takeout/Fitbit/Physical Activity/exercise-0.json':
+      JSON.stringify([{ logId: 9, activityName: 'Run', startTime: '07/04/26 07:30:00',
+                        activeDuration: 1800000, distance: 5.2, distanceUnit: 'Kilometer',
+                        calories: 410, averageHeartRate: 156 }]),
+    'Takeout/Fitbit/Global Export Data/weight-2026-07.json':
+      JSON.stringify([{ weight: 185.2, date: '07/04/26', time: '07:10:00' }]),
+    'Takeout/Fitbit/Your Profile/Profile.csv': 'full_name,weight_unit\nIvan,POUND\n',
+    // A corrupt file must not abandon an import of everything else.
+    'Takeout/Fitbit/Sleep/sleep-2026-07-02.json': '{ this is not json'
+  }), 'takeout.zip');
+
+  const entries = await app.zipEntries(zip);
+  const res = await app.importTakeout(zip, entries, { importBatch: 'fb1' });
+
+  suite('Takeout import', () => {
+    eq('the workout is imported', res.sessions.length, 1);
+    eq('with its distance in metres', Math.round(res.sessions[0].distanceM), 5200);
+    eq('coverage is derived from the records', [res.tally.from, res.tally.to],
+       ['2026-07-04', '2026-07-04']);
+
+    const day = m => res.daily.find(d => d.metric === m);
+    eq('steps fold into one day', day('steps').value, 9400);
+    eq('resting heart rate arrives', day('resting_hr').value, 58);
+    eq('sleep arrives', day('sleep').value, 431);
+    close('weight uses the unit from the profile', day('weight').value, 84.0, 0.1);
+    eq('the profile unit is reported', res.meta.weightUnit, 'lb');
+
+    ok('per-second heart rate is never read',
+       !res.daily.some(d => d.metric === 'heart_rate'));
+    eq('one bad file is skipped, not fatal', res.meta.filesFailed, 1);
+    ok('and the rest still imported', res.sessions.length === 1 && day('steps') != null);
+
+    // The whole point: these must reconcile against Apple, not stack on top of it.
+    eq('Fitbit records are attributed to Fitbit',
+       app.sourceLabel(res.sessions[0].source), 'Fitbit');
+  });
+
+  suite('Fitbit and Apple reconcile against each other', () => {
+    // The same run, once from the Apple export and once from Takeout. Dedupe must
+    // treat them as one — which only works because the Fitbit wall-clock time was
+    // resolved into a real instant.
+    const when = app.parseFitbitDate('07/04/26 07:30:00');
+    const appleCopy = app.makeSession({
+      activity: 'running', rawActivity: 'HKWorkoutActivityTypeRunning',
+      start: when.ms + 20000, end: when.ms + 1800000, tzOffset: when.offsetMin,
+      distanceM: 5190,
+      source: { vendor: 'apple', app: 'Apple Health', device: 'Google Health' }
+    });
+    const d = app.dedupeSessions([res.sessions[0], appleCopy], app.DEFAULT_SETTINGS, {});
+    const kept = d.filter(x => !x.supersededBy);
+    eq('the same run from two exports counts once', kept.length, 1);
+    eq('the direct Fitbit record outranks the relayed copy',
+       app.sourceLabel(kept[0].record.source), 'Fitbit');
   });
 }
 
@@ -567,6 +749,8 @@ async function takeoutTests() {
     rollupTests();
     await zipTests();
     await takeoutTests();
+    fitbitParseTests();
+    await fitbitImportTests();
   } catch (err) {
     failed++;
     console.log(`\n${C.red}Uncaught: ${err && err.stack || err}${C.off}`);

@@ -123,7 +123,7 @@ function renderInspection(rep) {
   const span = rep.range.from && rep.range.to ? `${rep.range.from} → ${rep.range.to}` : 'unknown';
   const years = rep.range.from && rep.range.to
     ? (daysBetween(rep.range.from, rep.range.to) / 365.25) : 0;
-  const importable = rep.file.kind === 'apple-zip' || rep.file.kind === 'apple-xml';
+  const importable = ['apple-zip', 'apple-xml', 'fitbit-zip'].indexOf(rep.file.kind) !== -1;
 
   host.innerHTML = `
     <div class="card">
@@ -156,8 +156,8 @@ function renderInspection(rep) {
 
       <h3>${rep.takeout ? 'What is in the archive' : 'What is in the file'}</h3>
       <p class="subtle">${rep.takeout
-        ? 'Each folder holds one kind of data. Expand a row to see the real shape of ' +
-          'its files — that is what a parser has to be written against.'
+        ? 'Each folder holds one kind of data. A green tick marks what will be ' +
+          'imported; expand a row to see the real shape of its files.'
         : 'A green tick marks the types this app will actually store.'}</p>
       <div class="table-wrap"><table class="data-table">
         <thead><tr><th>Type</th><th class="num">Count</th><th>Range</th><th>Tracked</th></tr></thead>

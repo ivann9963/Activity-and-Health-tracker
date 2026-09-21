@@ -22,15 +22,16 @@ Under construction, in phases. Working today:
 - **File Inspector** — drop in an Apple Health `export.zip`/`export.xml` or a Strava
   `activities.csv` and see exactly what is inside: record types, counts, date coverage
   and which device recorded what. Nothing is written to storage.
-- **Import** — Apple Health exports, parsed in a worker so the tab stays responsive,
-  with progress, and undoable in full.
+- **Import** — Apple Health exports *and* Google Health (Fitbit) Takeout archives,
+  parsed in a worker so the tab stays responsive, with progress, and undoable in full.
 - **Deduplication** — overlapping workouts are grouped and one is elected; steps and
   other continuous metrics are never summed across devices. Every decision is visible
   and reversible on the Duplicates screen.
 - **Week / month / year** — totals, comparison against the previous period, active
   days, per-day bars, and all-time totals since your data begins.
 
-Next: goals and pace, streaks, a Year in Review, then Fitbit sync and Strava import.
+Next: goals and pace, streaks, a Year in Review, then live Fitbit sync (the Web API
+supports PKCE, so a static page can do it with no backend) and Strava import.
 
 ## Running it
 
@@ -73,9 +74,16 @@ metric you want. Then redo the Apple export. The Inspector will show `Google Hea
 a recording source, and its date range tells you how far back the sync actually reached
 — which Google has not documented.
 
-*Thorough.* [takeout.google.com](https://takeout.google.com) → *Deselect all* → tick
-**Fitbit** (Google renamed the app but not the Takeout category). Drop the archive in
-and the Inspector reports its folders and the real JSON shape of each kind of file.
+*Thorough, and imports directly.* [takeout.google.com](https://takeout.google.com) →
+*Deselect all* → tick **Fitbit** (Google renamed the app but not the Takeout category).
+Drop the archive in: the Inspector reports its folders and the real JSON shape of each
+kind of file, and the importer reads steps, workouts, sleep, resting heart rate and
+weight out of it.
+
+Fitbit's export states no timezone anywhere, so its wall-clock times are resolved
+against your browser's zone using the rules in force on each date. That is what keeps a
+Fitbit run aligned with its Apple Health twin — without it the two would never be
+recognised as the same run and it would be counted twice.
 
 ## Layout
 
@@ -98,7 +106,8 @@ js/
     xml-stream.js     streaming XML tag scanner
     normalize.js      units and source names
     apple-health.js   the Apple export parser
-    fitbit-takeout.js Google Health (Fitbit) Takeout archive inspection
+    fitbit-parse.js   Fitbit record parsers (dates, steps, sleep, exercise, weight)
+    fitbit-takeout.js Takeout archive walking, inspection and import
     sniffer.js        works out what a dropped file is
     inspector.js      reports a file's contents without importing
     importer.js       parse in a worker, store, reconcile, undo

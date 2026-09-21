@@ -84,6 +84,44 @@ function makeDaily(raw) {
   return rec;
 }
 
+// Accumulates many samples into one figure per (metric, day, source). Shared by every
+// importer, because they all face the same problem: a day holds hundreds of step
+// samples and two weigh-ins, and only the folded result is worth storing.
+//
+// Values are folded in as they arrive rather than collected into arrays — a decade of
+// step samples is millions of numbers and we only ever need their sum.
+class DailyBuckets {
+  constructor() { this.map = new Map(); }
+
+  add(metric, localDate, source, value, agg, at) {
+    if (value == null || !isFinite(value)) return;
+    const key = metric + '|' + localDate + '|' + sourceLabel(source);
+    let b = this.map.get(key);
+    if (!b) {
+      b = { metric, localDate, source, agg, sum: 0, count: 0, last: null, lastAt: -Infinity };
+      this.map.set(key, b);
+    }
+    b.sum += value;
+    b.count++;
+    // 'last' means the latest reading of the day, so ordering is by timestamp rather
+    // than by the order records happened to appear in the file.
+    if (at >= b.lastAt) { b.last = value; b.lastAt = at; }
+  }
+
+  toRecords(importBatch, importedAt) {
+    const out = [];
+    for (const b of this.map.values()) {
+      const value = b.agg === 'sum' ? b.sum
+                  : b.agg === 'avg' ? b.sum / b.count
+                  : b.last;
+      if (value == null || !isFinite(value)) continue;
+      out.push(makeDaily({ metric: b.metric, localDate: b.localDate, value,
+                           source: b.source, importBatch, importedAt }));
+    }
+    return out;
+  }
+}
+
 // A short, stable label for a source — what the Duplicates screen and the source
 // priority settings show. Prefers the recording device over the app that relayed it,
 // because "Apple Watch" is the useful distinction, not "Apple Health".
@@ -93,5 +131,6 @@ function sourceLabel(source) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { hash64, sessionId, dailyId, makeSession, makeDaily, sourceLabel };
+  module.exports = { hash64, sessionId, dailyId, makeSession, makeDaily, sourceLabel,
+                     DailyBuckets };
 }
