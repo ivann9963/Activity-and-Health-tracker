@@ -39,6 +39,8 @@ Published to GitHub Pages on every push to the default branch, after the tests p
 
 **https://ivann9963.github.io/Activity-and-Health-tracker/**
 
+(Pending the one-time Pages setup described under *Build and deploy* below.)
+
 Open it in Safari on your iPhone and use **Share → Add to Home Screen** to install it.
 It works offline once installed, and your data never leaves the device.
 
@@ -67,9 +69,15 @@ everything it `importScripts`), bakes that into the service worker's precache ma
 so the two can never drift apart, and stamps the commit as a build id so a deploy
 invalidates the previous cache instead of stranding people on a stale copy.
 
-Deployment is `.github/workflows/deploy.yml`. It tries to enable Pages itself on the
-first run; if the token is not permitted to change repository settings, turn it on by
-hand under *Settings → Pages* with Source = *GitHub Actions*, then re-run the workflow.
+Deployment is `.github/workflows/deploy.yml`.
+
+**One-time setup, required once by a repository admin:** *Settings → Pages → Source:
+**GitHub Actions***. This genuinely cannot be automated — the workflow asks
+`configure-pages` to create the site, but the default `GITHUB_TOKEN` is refused
+(*"Create Pages site failed: Resource not accessible by integration"*), because
+creating a Pages site needs administration rights a workflow token never gets. Every
+deploy after that is automatic.
+
 To publish to your own domain instead, set a repository variable `CUSTOM_DOMAIN` — the
 build writes the `CNAME` file and Pages picks it up.
 
