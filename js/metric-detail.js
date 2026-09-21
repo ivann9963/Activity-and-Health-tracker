@@ -148,6 +148,7 @@ function goalEditorHtml(id, goal) {
        the app will still show totals and trends.</p>
     <div class="goal-row">
       <input type="number" id="goal-input" class="goal-input" min="0" step="any"
+             aria-label="Target ${escHtml(goalUnit(id))} for one ${escHtml(goalPeriod())}"
              value="${goal ? goalInputValue(id, goal.target) : ''}"
              placeholder="${escHtml(goalPlaceholder(id))}">
       <span class="goal-unit">${escHtml(goalUnit(id))}</span>

@@ -38,9 +38,36 @@ function confirmDialog(opts, onConfirm) {
         </div>
       </div>
     </div>`;
-  const close = () => { host.innerHTML = ''; };
-  host.querySelector('[data-act="cancel"]').onclick = close;
-  host.querySelector('[data-act="ok"]').onclick = () => { close(); onConfirm(); };
+  // Focus has to move into the dialog, or a keyboard user is left tabbing through the
+  // page behind it with no idea a question is being asked. It returns to wherever it
+  // came from on close.
+  const returnFocus = document.activeElement;
+  const close = () => {
+    host.innerHTML = '';
+    document.removeEventListener('keydown', onKey, true);
+    if (returnFocus && returnFocus.focus) returnFocus.focus();
+  };
+
+  const confirmBtn = host.querySelector('[data-act="ok"]');
+  const cancelBtn = host.querySelector('[data-act="cancel"]');
+  // The cancel button takes focus rather than the confirm one: these dialogs guard
+  // destructive actions, and a stray Enter should not be the thing that deletes
+  // everything.
+  cancelBtn.focus();
+
+  function onKey(ev) {
+    if (ev.key === 'Escape') { ev.preventDefault(); close(); return; }
+    if (ev.key !== 'Tab') return;
+    // Keep Tab inside the dialog; two buttons make the trap trivial.
+    const focusable = [cancelBtn, confirmBtn];
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+  }
+  document.addEventListener('keydown', onKey, true);
+
+  cancelBtn.onclick = close;
+  confirmBtn.onclick = () => { close(); onConfirm(); };
   host.querySelector('.dialog-backdrop').onclick = ev => { if (ev.target === ev.currentTarget) close(); };
 }
 

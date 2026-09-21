@@ -34,6 +34,24 @@
 
 * { box-sizing: border-box; }
 
+/* A visible focus ring on everything reachable by keyboard. :focus-visible rather
+   than :focus so a mouse click does not leave a ring behind, and an offset so the
+   ring sits outside the element rather than on top of its own border. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Keyboard users land on the nav otherwise, and have to tab past every tab on every
+   view to reach the content. The link stays out of the way until focused. */
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 50;
+  background: var(--surface); color: var(--text);
+  padding: 10px 16px; border: 1px solid var(--accent); border-radius: 0 0 8px 0;
+}
+.skip-link:focus { left: 0; }
+
 body {
   margin: 0;
   font-family: var(--font);
@@ -111,7 +129,7 @@ body {
   cursor: pointer;
   transition: border-color .15s, background .15s;
 }
-.dropzone:hover, .dropzone:focus-visible { border-color: var(--accent); outline: none; }
+.dropzone:hover, .dropzone:focus-visible { border-color: var(--accent); }
 .dropzone.dragging { border-color: var(--accent); background: var(--surface-2); }
 .dropzone-icon { font-size: 34px; }
 .dropzone-title { font-weight: 600; margin-top: 8px; }

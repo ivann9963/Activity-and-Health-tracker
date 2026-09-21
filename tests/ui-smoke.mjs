@@ -263,7 +263,23 @@ try {
   check('a backup downloads, gzipped', fs.statSync(backupPath).size > 100,
     `${fs.statSync(backupPath).size} bytes`);
 
+  // --- keyboard accessibility ---
+  // The dialog guards a destructive action, so focus must land on Cancel rather than
+  // on the button that deletes everything, and Escape must get out.
   await page.locator('#wipe').click();
+  await page.waitForSelector('.dialog');
+  const focused = await page.evaluate(() =>
+    document.activeElement && document.activeElement.textContent.trim());
+  check('a destructive dialog focuses Cancel, not Confirm', /cancel/i.test(focused || ''),
+    `focus was on "${focused}"`);
+  await page.keyboard.press('Escape');
+  check('and Escape closes it', (await page.locator('.dialog').count()) === 0);
+
+  const skip = await page.locator('.skip-link').count();
+  check('there is a skip link for keyboard users', skip === 1);
+
+  await page.locator('#wipe').click();
+  await page.waitForSelector('.dialog');
   await page.locator('.dialog button:has-text("Delete everything")').click();
   await page.waitForFunction(
     () => /0 workouts/.test(document.body.innerText), null, { timeout: 15000 });
