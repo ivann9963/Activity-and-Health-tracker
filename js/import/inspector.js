@@ -20,6 +20,10 @@ function inspectFile(file, onProgress) {
         .then(stream => scanAppleExport(stream, { collect: false, onProgress }))
         .then(res => ({ ...base, ...summariseApple(res), ms: Date.now() - startedAt }));
     }
+    if (sniff.kind === 'fitbit-zip') {
+      return inspectTakeout(file, sniff.entries)
+        .then(res => ({ ...base, ...res, ms: Date.now() - startedAt }));
+    }
     if (sniff.kind === 'strava-csv' || sniff.kind === 'strava-zip') {
       const textOf = sniff.kind === 'strava-zip'
         ? zipEntryText(file, sniff.entry) : file.text();
@@ -120,8 +124,10 @@ function inspectionReportText(rep) {
   }
   if (rep.meta && rep.meta.exportDate) L.push(`EXPORTED  ${rep.meta.exportDate}`);
   L.push(`COVERS    ${rep.range.from || '?'} → ${rep.range.to || '?'}`);
-  L.push(`CONTAINS  ${rep.totals.records.toLocaleString()} records, ` +
-         `${rep.totals.workouts.toLocaleString()} workouts`);
+  L.push(rep.takeout
+    ? `CONTAINS  ${rep.totals.records.toLocaleString()} data files`
+    : `CONTAINS  ${rep.totals.records.toLocaleString()} records, ` +
+      `${rep.totals.workouts.toLocaleString()} workouts`);
   L.push(`READ IN   ${(rep.ms / 1000).toFixed(1)}s`);
   L.push('', 'RECORDING SOURCES');
   rep.sources.forEach(s => L.push(`  ${s.name.padEnd(20)} ${s.count.toLocaleString()}`));
@@ -130,6 +136,13 @@ function inspectionReportText(rep) {
     const name = t.type.replace(/^HK(Quantity|Category)TypeIdentifier/, '').replace(/HKWorkoutActivityType/, '');
     L.push(`  ${name.padEnd(34)} ${String(t.count).padStart(9)}  ` +
            `${t.from || '?'}..${t.to || '?'}` + (t.mapped ? `  → ${t.mapped}` : ''));
+    if (t.sample) {
+      L.push(`      sample: ${t.sample.file} (${t.sample.format}` +
+             (t.sample.count != null ? `, ${t.sample.count} entries` : '') + ')');
+      if (t.sample.error) L.push(`      error: ${t.sample.error}`);
+      if (t.sample.keys && t.sample.keys.length) L.push(`      keys: ${t.sample.keys.join(', ')}`);
+      if (t.sample.example) L.push(`      example: ${JSON.stringify(t.sample.example)}`);
+    }
   });
   return L.join('\n');
 }

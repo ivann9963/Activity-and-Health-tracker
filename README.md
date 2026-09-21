@@ -64,9 +64,18 @@ Takes several minutes and produces `export.zip`. Drop it in as-is.
 **Strava** — strava.com → Settings → My Account → *Download or Delete Your Account* →
 *Get Started* → *Request your archive*. Emailed within a few hours.
 
-**Fitbit** — nothing to export: Fitbit's API can sync directly, and that arrives in a
-later phase. In the meantime, if the Google Health app on your iPhone is sharing with
-Apple Health, your Fitbit data is already inside the Apple export.
+**Google Health** (the app Google renamed from Fitbit in May 2026) — two routes:
+
+*Easiest, and needs no second file.* Google Health can push its data back into Apple
+Health, so one Apple export then covers both eras. In the Google Health app: profile
+icon → **Partner apps** → **Apple Health** → **Get started** → **Agree**, granting every
+metric you want. Then redo the Apple export. The Inspector will show `Google Health` as
+a recording source, and its date range tells you how far back the sync actually reached
+— which Google has not documented.
+
+*Thorough.* [takeout.google.com](https://takeout.google.com) → *Deselect all* → tick
+**Fitbit** (Google renamed the app but not the Takeout category). Drop the archive in
+and the Inspector reports its folders and the real JSON shape of each kind of file.
 
 ## Layout
 
@@ -89,6 +98,7 @@ js/
     xml-stream.js     streaming XML tag scanner
     normalize.js      units and source names
     apple-health.js   the Apple export parser
+    fitbit-takeout.js Google Health (Fitbit) Takeout archive inspection
     sniffer.js        works out what a dropped file is
     inspector.js      reports a file's contents without importing
     importer.js       parse in a worker, store, reconcile, undo

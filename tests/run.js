@@ -442,12 +442,79 @@ async function zipTests() {
   eq('a Strava CSV inspects to an activity count', stravaReport.totals.workouts, 1);
 }
 
+// --- Google Health / Fitbit Takeout ---------------------------------------------------
+async function takeoutTests() {
+  // Shaped like a real export: Takeout/Fitbit/<folder>/<name>-YYYY-MM-DD.json.
+  // Google renamed the app to Google Health but left the Takeout category as "Fitbit",
+  // so recognition has to key off the path, not the branding.
+  const zip = namedBlob(await makeZip({
+    'Takeout/Fitbit/Global Export Data/steps-2026-07-01.json':
+      JSON.stringify([{ dateTime: '07/01/26 00:00:00', value: '52' },
+                      { dateTime: '07/01/26 00:01:00', value: '118' }]),
+    'Takeout/Fitbit/Global Export Data/steps-2026-07-02.json':
+      JSON.stringify([{ dateTime: '07/02/26 00:00:00', value: '40' }]),
+    'Takeout/Fitbit/Global Export Data/steps-2026-09-15.json':
+      JSON.stringify([{ dateTime: '09/15/26 00:00:00', value: '77' }]),
+    'Takeout/Fitbit/Sleep/sleep-2026-07-01.json':
+      JSON.stringify([{ logId: 42, dateOfSleep: '2026-07-01',
+                        startTime: '2026-06-30T23:30:00.000',
+                        endTime: '2026-07-01T07:00:00.000',
+                        duration: 27000000, minutesAsleep: 420,
+                        levels: { summary: {}, data: [1, 2, 3] } }]),
+    'Takeout/Fitbit/Physical Activity/exercise-0.json':
+      JSON.stringify([{ logId: 9, activityName: 'Run', startTime: '07/01/26 07:30:00',
+                        duration: 1800000, distance: 5.2, distanceUnit: 'Kilometer',
+                        calories: 410, averageHeartRate: 156 }]),
+    'Takeout/Fitbit/Your Profile/Profile.csv': 'full_name,date_of_birth\nIvan,1990-01-01\n'
+  }), 'takeout-20260921.zip');
+
+  const sniff = await app.sniffFile(zip);
+  suite('Google Health (Fitbit) Takeout', () => {
+    eq('the archive is recognised by its path, not the word Fitbit',
+       sniff.kind, 'fitbit-zip');
+    eq('and labelled by the app\'s current name', sniff.label, 'Google Health (Fitbit) export');
+  });
+
+  const rep = await app.inspectFile(zip);
+  suite('Takeout inspection', () => {
+    eq('coverage comes from the file names', [rep.range.from, rep.range.to],
+       ['2026-07-01', '2026-09-15']);
+    eq('every data folder is listed',
+       rep.types.map(t => t.type).sort(),
+       ['Global Export Data', 'Physical Activity', 'Sleep', 'Your Profile']);
+    eq('files are counted per folder',
+       rep.types.find(t => t.type === 'Global Export Data').count, 3);
+
+    // The point of the pass: report the real schema rather than assume one.
+    const exercise = rep.types.find(t => t.type === 'Physical Activity').sample;
+    eq('a JSON array is identified as such', exercise.format, 'json-array');
+    ok('and its real keys are reported',
+       ['activityName', 'startTime', 'duration', 'distance'].every(k => exercise.keys.includes(k)),
+       JSON.stringify(exercise.keys));
+    eq('nested values are summarised rather than dumped',
+       app.describeSample('sleep-2026-07-01.json',
+         JSON.stringify([{ levels: { data: [1, 2, 3] } }])).example.levels, '{…}');
+
+    const profile = rep.types.find(t => t.type === 'Your Profile').sample;
+    eq('CSV files are described too', profile.format, 'csv');
+    eq('with their column names', profile.keys, ['full_name', 'date_of_birth']);
+
+    ok('nothing in a Takeout archive is importable yet',
+       rep.types.every(t => t.mapped === null));
+
+    const text = app.inspectionReportText(rep);
+    ok('the text report carries the schema, which is the point of pasting it back',
+       /keys: .*activityName/.test(text), text.slice(0, 600));
+  });
+}
+
 // --- run ------------------------------------------------------------------------------
 (async () => {
   try {
     await appleTests();
     fixtureDedupeTests();
     await zipTests();
+    await takeoutTests();
   } catch (err) {
     failed++;
     console.log(`\n${C.red}Uncaught: ${err && err.stack || err}${C.off}`);

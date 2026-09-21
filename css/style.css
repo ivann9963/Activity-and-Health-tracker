@@ -287,3 +287,10 @@ pre.scroll { max-height: 260px; overflow-y: auto; }
             gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
 .list-row:last-child { border-bottom: none; }
 .list-title { font-size: 14px; font-weight: 550; word-break: break-all; }
+
+/* --- inspected file samples --------------------------------------------------- */
+.sample { margin-top: 4px; }
+.sample summary { font-size: 12px; color: var(--text-dim); padding: 2px 0; }
+.sample-keys { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.sample-keys code { font-size: 11px; }
+.sample pre { font-size: 11px; max-height: 200px; overflow: auto; }

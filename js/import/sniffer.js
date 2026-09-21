@@ -36,8 +36,10 @@ function sniffZip(file) {
                detail: `${entries.length} files in the archive`,
                entry: stravaCsv, entries };
     }
-    if (names.some(n => /fitbit|physical.?activity|global.?export/i.test(n))) {
-      return { kind: 'fitbit-zip', label: 'Fitbit / Google Takeout export',
+    // Google renamed the Fitbit app to Google Health in May 2026 but kept the Takeout
+    // data category as "Fitbit", so the archive still says Takeout/Fitbit/.
+    if (isTakeoutArchive(entries)) {
+      return { kind: 'fitbit-zip', label: 'Google Health (Fitbit) export',
                detail: `${entries.length} files in the archive`, entries };
     }
     return { kind: 'unknown-zip', label: 'Unrecognised archive',

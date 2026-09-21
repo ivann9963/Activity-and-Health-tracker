@@ -18,6 +18,7 @@ const FILES = [
   'js/import/xml-stream.js',
   'js/import/zip.js',
   'js/import/apple-health.js',
+  'js/import/fitbit-takeout.js',
   'js/import/sniffer.js',
   'js/import/inspector.js',
   'js/dedupe/rules.js',
@@ -64,6 +65,7 @@ function loadApp() {
       zipEntries, zipEntryText, zipEntryStream,
       parseAppleDate, AppleCollector, scanAppleExport, APPLE_DAILY_METRICS,
       sniffFile, humanSize,
+      isTakeoutArchive, takeoutFolders, inspectTakeout, describeSample,
       inspectFile, inspectionReportText,
       // dedupe + rollups (present from phase 3 onward)
       dedupeSessions, applySessionDecisions,

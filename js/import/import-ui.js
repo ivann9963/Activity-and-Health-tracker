@@ -128,8 +128,11 @@ function renderInspection(rep) {
       <h2>${escHtml(rep.file.label)}</h2>
       <div class="stat-row">
         ${statTile('Covers', span, years >= 1 ? `${years.toFixed(1)} years` : '')}
-        ${statTile('Workouts', humanCount(rep.totals.workouts), '')}
-        ${statTile('Records', humanCount(rep.totals.records), `read in ${(rep.ms / 1000).toFixed(1)}s`)}
+        ${rep.takeout
+          ? statTile('Folders', humanCount(rep.types.length), '')
+          : statTile('Workouts', humanCount(rep.totals.workouts), '')}
+        ${statTile(rep.takeout ? 'Data files' : 'Records', humanCount(rep.totals.records),
+                   `read in ${(rep.ms / 1000).toFixed(1)}s`)}
       </div>
 
       ${importable ? `<div class="card-actions">
@@ -138,6 +141,7 @@ function renderInspection(rep) {
       </div>` : `<p class="subtle">Importing this kind of file is not supported yet.</p>
         ${copyReportButton()}`}
 
+      ${rep.takeout ? '' : `
       <h3>Who recorded it</h3>
       <p class="subtle">Each device that contributed data. Overlapping sources are the
          reason this app reconciles rather than adds up.</p>
@@ -146,14 +150,18 @@ function renderInspection(rep) {
         <tbody>${rep.sources.map(s => `<tr>
           <td>${escHtml(s.name)}</td><td class="num">${humanCount(s.count)}</td></tr>`).join('')}
         </tbody>
-      </table></div>
+      </table></div>`}
 
-      <h3>What is in the file</h3>
-      <p class="subtle">A green tick marks the types this app will actually store.</p>
+      <h3>${rep.takeout ? 'What is in the archive' : 'What is in the file'}</h3>
+      <p class="subtle">${rep.takeout
+        ? 'Each folder holds one kind of data. Expand a row to see the real shape of ' +
+          'its files — that is what a parser has to be written against.'
+        : 'A green tick marks the types this app will actually store.'}</p>
       <div class="table-wrap"><table class="data-table">
         <thead><tr><th>Type</th><th class="num">Count</th><th>Range</th><th>Tracked</th></tr></thead>
         <tbody>${rep.types.map(t => `<tr>
-          <td>${escHtml(t.type.replace(/^HK(Quantity|Category)TypeIdentifier/, '').replace(/HKWorkoutActivityType/, ''))}</td>
+          <td>${escHtml(t.type.replace(/^HK(Quantity|Category)TypeIdentifier/, '').replace(/HKWorkoutActivityType/, ''))}
+            ${t.sample ? sampleHtml(t.sample) : ''}</td>
           <td class="num">${humanCount(t.count)}</td>
           <td class="subtle nowrap">${escHtml(t.from || '?')} → ${escHtml(t.to || '?')}</td>
           <td>${t.mapped ? `<span class="yes">✓ ${escHtml(t.mapped)}</span>` : '<span class="no">—</span>'}</td>
@@ -238,6 +246,18 @@ function wireHistory() {
   });
 }
 
+// The schema of one sampled file, shown inline so the report is self-contained.
+function sampleHtml(sample) {
+  return `<details class="sample"><summary>${escHtml(sample.file)}</summary>
+    <div class="subtle">${escHtml(sample.format)}${
+      sample.count != null ? ` · ${humanCount(sample.count)} entries` : ''}</div>
+    ${sample.error ? `<div class="subtle">${escHtml(sample.error)}</div>` : ''}
+    ${sample.keys && sample.keys.length
+      ? `<div class="sample-keys">${sample.keys.map(k => `<code>${escHtml(k)}</code>`).join(' ')}</div>` : ''}
+    ${sample.example ? `<pre>${escHtml(JSON.stringify(sample.example, null, 1))}</pre>` : ''}
+  </details>`;
+}
+
 function statTile(label, value, sub) {
   // Long values (a date span) need a smaller face or they wrap to three lines.
   const long = String(value).length > 12 ? ' stat-value-long' : '';
@@ -285,11 +305,23 @@ function exportHelpHtml() {
         <li>Strava emails a link, usually within a few hours.</li>
       </ol>
     </details>
-    <details>
-      <summary><strong>Fitbit</strong> — automatic, once connected</summary>
-      <p>Fitbit can sync directly, without export files. That connection arrives in a
-         later version; for now, if the Google Health app on your iPhone is set to share
-         with Apple Health, your Fitbit data is already inside the Apple export above.</p>
+    <details open>
+      <summary><strong>Google Health</strong> (the app formerly called Fitbit)</summary>
+      <p><strong>The easy route — no second file needed.</strong> Google Health can push
+         its data back into Apple Health, so one Apple export then covers both. In the
+         <strong>Google Health</strong> app: tap your <strong>profile icon</strong> →
+         <strong>Partner apps</strong> → <strong>Apple Health</strong> →
+         <strong>Get started</strong> → <strong>Agree</strong>, then grant every metric
+         you care about. If it offers a history window, choose the longest one.</p>
+      <p>Afterwards, redo the Apple Health export above and drop it here. The report
+         will show <em>Google Health</em> as a recording source, and its date range tells
+         you how far back the sync actually reached.</p>
+      <p><strong>The thorough route.</strong> Go to
+         <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a>,
+         press <em>Deselect all</em>, then tick <strong>Fitbit</strong> — Google renamed
+         the app but not the Takeout category, so that checkbox is your Google Health
+         data. Drop the resulting archive here and the report will show exactly what is
+         inside it.</p>
     </details>
   </div>`;
 }
