@@ -20,6 +20,15 @@ function inspectFile(file, onProgress) {
         .then(stream => scanAppleExport(stream, { collect: false, onProgress }))
         .then(res => ({ ...base, ...summariseApple(res), ms: Date.now() - startedAt }));
     }
+    // A backup is inspected like anything else: before restoring one it is worth
+    // seeing when it was made and how much it holds, especially when deciding
+    // whether an older file is still the one you want.
+    if (sniff.kind === 'app-backup') {
+      return readBackupFile(file)
+        .then(backup => ({ ...base, ...summariseBackup(backup), ms: Date.now() - startedAt }))
+        .catch(err => ({ ...base, unsupported: true, error: err.message,
+                         ms: Date.now() - startedAt }));
+    }
     if (sniff.kind === 'fitbit-zip') {
       return inspectTakeout(file, sniff.entries)
         .then(res => ({ ...base, ...res, ms: Date.now() - startedAt }));
@@ -69,6 +78,29 @@ function appleTypeMetric(type) {
   if (type === 'HKCategoryTypeIdentifierSleepAnalysis') return 'sleep';
   const spec = APPLE_DAILY_METRICS[type];
   return spec ? spec.metric : null;
+}
+
+function summariseBackup(backup) {
+  const stores = backup.stores || {};
+  const counts = backup.counts || {};
+  const dates = (stores.sessions || []).map(r => r.localDate)
+    .concat((stores.daily || []).map(r => r.localDate))
+    .filter(Boolean)
+    .sort();
+
+  return {
+    meta: { exportDate: backup.createdAt
+      ? new Date(backup.createdAt).toISOString().slice(0, 19).replace('T', ' ') : null },
+    totals: { records: counts.daily || (stores.daily || []).length,
+              workouts: counts.sessions || (stores.sessions || []).length, bytes: 0 },
+    range: { from: dates[0] || null, to: dates[dates.length - 1] || null },
+    sources: [{ name: 'Your own backup', count: (stores.sessions || []).length }],
+    types: Object.entries(stores).map(([name, rows]) => ({
+      type: name, count: (rows || []).length, from: null, to: null,
+      sources: [], units: [], mapped: 'restored'
+    })).sort((a, b) => b.count - a.count),
+    isBackup: true
+  };
 }
 
 function summariseStrava(text) {

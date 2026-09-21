@@ -6,6 +6,7 @@
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -247,6 +248,45 @@ try {
 
   check('the dashboard has a heading of its own',
     (await page.locator('h1.period-label').innerText()).length > 0);
+
+  // --- backup round trip ---
+  // A backup that cannot be restored is worse than no backup, so this deletes
+  // everything and brings it back rather than just checking a file downloads.
+  await page.locator('.nav-btn:has-text("Settings")').click();
+  await page.waitForSelector('#do-backup');
+  const download = await Promise.all([
+    page.waitForEvent('download', { timeout: 20000 }),
+    page.locator('#do-backup').click()
+  ]).then(([d]) => d);
+  const backupPath = path.join(os.tmpdir(), 'ledger-backup-' + Date.now() + '.json.gz');
+  await download.saveAs(backupPath);
+  check('a backup downloads, gzipped', fs.statSync(backupPath).size > 100,
+    `${fs.statSync(backupPath).size} bytes`);
+
+  await page.locator('#wipe').click();
+  await page.locator('.dialog button:has-text("Delete everything")').click();
+  await page.waitForFunction(
+    () => /0 workouts/.test(document.body.innerText), null, { timeout: 15000 });
+  check('deleting everything really empties it', true);
+
+  await page.locator('.nav-btn:has-text("Data")').click();
+  await page.waitForSelector('#dropzone');
+  await page.locator('#file-input').setInputFiles(backupPath);
+  await page.waitForSelector('#do-import', { timeout: 20000 });
+  const restoreLabel = await page.locator('#do-import').innerText();
+  check('a backup is recognised as one, not as an import',
+    /restore/i.test(restoreLabel), restoreLabel);
+
+  await page.locator('#do-import').click();
+  await page.waitForSelector('.list-row', { timeout: 30000 });
+  await page.locator('.nav-btn:has-text("Home")').click();
+  await page.waitForSelector('.metric-grid');
+  await page.locator('.segmented button:has-text("Year")').click();
+  await page.waitForSelector('.metric-grid');
+  const restored = await page.locator('#view-host').innerText();
+  check('the data comes back', /All time/i.test(restored) && /km/.test(restored),
+    restored.slice(0, 300));
+  fs.unlinkSync(backupPath);
 
   if (AGAINST_BUILD) {
     // The built copy carries a real service worker with a generated precache list.

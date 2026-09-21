@@ -123,7 +123,8 @@ function renderInspection(rep) {
   const span = rep.range.from && rep.range.to ? `${rep.range.from} → ${rep.range.to}` : 'unknown';
   const years = rep.range.from && rep.range.to
     ? (daysBetween(rep.range.from, rep.range.to) / 365.25) : 0;
-  const importable = ['apple-zip', 'apple-xml', 'fitbit-zip'].indexOf(rep.file.kind) !== -1;
+  const importable = ['apple-zip', 'apple-xml', 'fitbit-zip', 'app-backup']
+    .indexOf(rep.file.kind) !== -1;
 
   host.innerHTML = `
     <div class="card">
@@ -138,12 +139,13 @@ function renderInspection(rep) {
       </div>
 
       ${importable ? `<div class="card-actions">
-        <button class="btn btn-primary" id="do-import">Import this file</button>
+        <button class="btn btn-primary" id="do-import">${rep.file.kind === 'app-backup'
+          ? 'Restore this backup' : 'Import this file'}</button>
         <button class="btn btn-ghost" id="copy-report">Copy report as text</button>
       </div>` : `<p class="subtle">Importing this kind of file is not supported yet.</p>
         ${copyReportButton()}`}
 
-      ${rep.takeout ? '' : `
+      ${(rep.takeout || rep.isBackup) ? '' : `
       <h3>Who recorded it</h3>
       <p class="subtle">Each device that contributed data. Overlapping sources are the
          reason this app reconciles rather than adds up.</p>
@@ -154,8 +156,12 @@ function renderInspection(rep) {
         </tbody>
       </table></div>`}
 
-      <h3>${rep.takeout ? 'What is in the archive' : 'What is in the file'}</h3>
-      <p class="subtle">${rep.takeout
+      <h3>${rep.isBackup ? 'What the backup holds'
+        : rep.takeout ? 'What is in the archive' : 'What is in the file'}</h3>
+      <p class="subtle">${rep.isBackup
+        ? 'Restoring merges rather than replaces: records carry stable ids, so ' +
+          'anything already here is left alone and anything missing is added back.'
+        : rep.takeout
         ? 'Each folder holds one kind of data. A green tick marks what will be ' +
           'imported; expand a row to see the real shape of its files.'
         : 'A green tick marks the types this app will actually store.'}</p>
@@ -195,19 +201,26 @@ function startImport(file) {
       paint(`${stageText}… ${humanSize(bytes)}`);
     }
   })
-    .then(({ batch, dedupe }) => {
+    .then(result => {
       status.innerHTML = '';
       _inspection = null;
       _inspectedFile = null;
-      const suppressed = dedupe.sessionsSuppressed + dedupe.dailySuppressed;
-      showToast(`Imported ${humanCount(batch.counts.sessions)} workouts` +
-                (suppressed ? ` · ${humanCount(suppressed)} duplicates set aside` : ''), 'success');
+      if (result.restored) {
+        const r = result.restored;
+        showToast(`Restored ${plural(r.sessions || 0, 'workout')} and ` +
+                  `${plural(r.daily || 0, 'daily figure')}`, 'success');
+      } else {
+        const suppressed = result.dedupe.sessionsSuppressed + result.dedupe.dailySuppressed;
+        showToast(`Imported ${plural(result.batch.counts.sessions, 'workout')}` +
+                  (suppressed ? ` · ${humanCount(suppressed)} duplicates set aside` : ''),
+                  'success');
+      }
       refreshView();
     })
     .catch(err => {
       console.error(err);
       status.innerHTML = errorBox('Import failed.', err);
-      if (btn) { btn.disabled = false; btn.textContent = 'Import this file'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
     })
     .finally(() => { _busy = false; });
 }

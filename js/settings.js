@@ -71,6 +71,18 @@ function renderSettings(host) {
         </div>
 
         <div class="card">
+          <h2>Backup</h2>
+          <p class="subtle">Everything lives in this browser alone. Clearing site data,
+             losing the device or reinstalling the browser takes it with it — and
+             re-importing means another twenty-minute export from your phone. A backup
+             is one file you keep wherever you like.</p>
+          <div class="card-actions">
+            <button class="btn btn-primary" id="do-backup">Save a backup</button>
+            <button class="btn btn-ghost" onclick="navigate('data')">Restore one</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h2>Stored data</h2>
           <p class="subtle">${humanCount(sessions)} workouts · ${humanCount(daily)} daily figures,
              all held in this browser on this device.</p>
@@ -120,6 +132,19 @@ function renderSettings(host) {
           });
         };
       });
+
+      el('do-backup').onclick = () => {
+        const btn = el('do-backup');
+        btn.disabled = true;
+        btn.textContent = 'Preparing…';
+        exportBackup()
+          .then(() => showToast('Backup saved', 'success'))
+          .catch(err => {
+            console.error(err);
+            showToast('Could not write the backup', 'error');
+          })
+          .finally(() => { btn.disabled = false; btn.textContent = 'Save a backup'; });
+      };
 
       el('wipe').onclick = () => confirmDialog({
         title: 'Delete all stored data?',

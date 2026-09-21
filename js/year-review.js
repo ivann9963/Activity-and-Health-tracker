@@ -51,18 +51,34 @@ function emptyReviewHtml() {
 }
 
 function reviewHtml(year, firstYear, lastYear, current, previous, sessions, shown, settings) {
-  // The hero is active days: it is the one figure that spans every metric, and it
-  // answers the question a year review is really asking — how often did you show up.
-  const activeDates = new Set(sessions.map(s => s.localDate));
-  for (const id of shown) {
-    const byDay = current[id] ? current[id].byDay : {};
-    const threshold = activeThreshold(id);
-    for (const [day, value] of Object.entries(byDay)) {
-      if (value != null && value > threshold && METRICS[id].kind === 'total') activeDates.add(day);
+  // The hero is active days — the one figure that spans every metric, and the
+  // question a year review is really asking: how often did you show up.
+  //
+  // "Active" means something deliberate, which is why this uses the session-based
+  // definition rather than counting any day with steps on it: a day at a desk still
+  // records a walk to the kitchen. Where there are no sessions at all — someone who
+  // has only ever imported step counts — it falls back rather than reporting zero.
+  const days = activeDays(sessions, `${year}-01-01`, `${year}-12-31`);
+  let activeCount = days.active;
+  let activeQualifier = days.walkingOnly
+    ? `${plural(days.walkingOnly, 'further day')} saw walking only.` : '';
+
+  if (!activeCount) {
+    const fallback = new Set();
+    for (const id of shown) {
+      if (METRICS[id].kind !== 'total') continue;
+      const threshold = activeThreshold(id);
+      for (const [day, value] of Object.entries(current[id] ? current[id].byDay : {})) {
+        if (value != null && value > threshold) fallback.add(day);
+      }
     }
+    activeCount = fallback.size;
+    activeQualifier = activeCount ? 'Counted from daily figures — no workouts were recorded.' : '';
   }
-  const daysInYear = dateRange(`${year}-01-01`, `${year}-12-31`).length;
+
+  const daysInYear = days.total;
   const movingSec = sessions.reduce((n, s) => n + (s.durationSec || 0), 0);
+  const share = timeByActivity(sessions, { excludeWalking: true });
 
   return `
     <div class="year-nav">
@@ -74,12 +90,29 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
     </div>
 
     <div class="card hero-card">
-      <div class="hero-figure">${humanCount(activeDates.size)}</div>
+      <div class="hero-figure">${humanCount(activeCount)}</div>
       <div class="hero-label">active days out of ${daysInYear}</div>
-      <p class="subtle">${escHtml(consistencySentence(activeDates.size, daysInYear))}
-        ${sessions.length ? ` ${humanCount(sessions.length)} workouts, ` +
-          `${escHtml(formatMetric('time_gym', movingSec))} moving.` : ''}</p>
+      <p class="subtle">${escHtml(consistencySentence(activeCount, daysInYear))}
+        ${sessions.length ? ` ${plural(sessions.length, 'workout')}, ` +
+          `${escHtml(formatMetric('time_gym', movingSec))} moving.` : ''}
+        ${escHtml(activeQualifier)}</p>
     </div>
+
+    ${share.length ? `<div class="card">
+      <h2>Where the time went</h2>
+      <p class="headline">Most of it went on ${share[0].icon}
+        <strong>${escHtml(share[0].label)}</strong> — ${Math.round(share[0].pct)}% of
+        ${escHtml(formatMetric('time_gym', movingSec))}.</p>
+      ${share.map(a => `
+        <div class="share-row">
+          <span class="share-label">${a.icon} ${escHtml(a.label)}</span>
+          <span class="share-value">${escHtml(formatMetric('time_gym', a.seconds))} ·
+            ${Math.round(a.pct)}%</span>
+          <div class="share-track"><div class="share-fill"
+            style="width:${a.pct.toFixed(1)}%"></div></div>
+        </div>`).join('')}
+      <p class="subtle">Walking is left out — it is ambient rather than chosen.</p>
+    </div>` : ''}
 
     ${shown.filter(id => METRICS[id].kind === 'total')
            .map(id => totalCardHtml(id, current[id], previous[id], year))

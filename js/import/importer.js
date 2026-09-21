@@ -18,13 +18,21 @@ function importFile(file, callbacks) {
     // Recognised but not yet wired up. Saying so plainly beats letting the file reach
     // a parser that cannot read it and surfacing whatever error that produces.
     const NOT_YET = {
-      'strava-zip': 'Strava import', 'strava-csv': 'Strava import',
-      'app-backup': 'Restoring from a backup'
+      'strava-zip': 'Strava import', 'strava-csv': 'Strava import'
     };
     if (NOT_YET[sniff.kind]) {
       throw new Error(`${NOT_YET[sniff.kind]} is not finished yet — for now, import your ` +
                       `Apple Health or Google Health export.`);
     }
+    if (sniff.kind === 'app-backup') {
+      stage('Reading the backup');
+      return readBackupFile(file)
+        .then(backup => {
+          stage('Restoring');
+          return restoreBackup(backup).then(written => ({ restored: written, backup }));
+        });
+    }
+
     const batch = newBatchId();
     stage('Reading the file');
 

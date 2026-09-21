@@ -4,6 +4,7 @@
 // Strava gave them without first having to know which is which.
 
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04]; // "PK\x03\x04"
+const GZIP_MAGIC = [0x1f, 0x8b];            // a gzipped backup, unreadable as text
 
 function isZip(head) {
   return ZIP_MAGIC.every((b, i) => head[i] === b);
@@ -15,6 +16,10 @@ function sniffFile(file) {
   return file.slice(0, 4).arrayBuffer().then(buf => {
     const head = new Uint8Array(buf);
     if (isZip(head)) return sniffZip(file);
+    if (GZIP_MAGIC.every((b, i) => head[i] === b)) {
+      return { kind: 'app-backup', label: 'Activity Ledger backup',
+               detail: humanSize(file.size) };
+    }
     return file.slice(0, 8192).text().then(text => sniffText(text, file));
   });
 }

@@ -29,9 +29,19 @@ Under construction, in phases. Working today:
   and reversible on the Duplicates screen.
 - **Week / month / year** — totals, comparison against the previous period, active
   days, per-day bars, and all-time totals since your data begins.
+- **Goals** derived from your own history, shown as a meter with a pace marker: not
+  just how far along you are, but whether that is ahead of where the calendar says
+  you should be.
+- **Per-metric detail** — each measure's whole history, its records, the streaks
+  behind them, and the individual sessions.
+- **Insights** — where your time actually went (as a share of time, not of sessions),
+  active days versus walking-only days, time spent in each heart-rate band, average
+  heart rate per sport weighted by session length, and running pace month by month.
+- **Year in Review** — the annual payoff, with totals given a scale you can picture.
+- **Backup and restore** — one gzipped file holding everything, because otherwise it
+  all lives in a single browser's database.
 
-Next: goals and pace, streaks, a Year in Review, then live Fitbit sync (the Web API
-supports PKCE, so a static page can do it with no backend) and Strava import.
+Next: live sync through the Google Health API, and Strava import.
 
 ## Live
 
