@@ -67,10 +67,11 @@ everything it `importScripts`), bakes that into the service worker's precache ma
 so the two can never drift apart, and stamps the commit as a build id so a deploy
 invalidates the previous cache instead of stranding people on a stale copy.
 
-Deployment is `.github/workflows/deploy.yml`. **It needs Pages switched on once by
-hand**: repository *Settings → Pages*, Source = *GitHub Actions*. To publish to your
-own domain instead, set a repository variable `CUSTOM_DOMAIN` — the build writes the
-`CNAME` file and Pages picks it up.
+Deployment is `.github/workflows/deploy.yml`. It tries to enable Pages itself on the
+first run; if the token is not permitted to change repository settings, turn it on by
+hand under *Settings → Pages* with Source = *GitHub Actions*, then re-run the workflow.
+To publish to your own domain instead, set a repository variable `CUSTOM_DOMAIN` — the
+build writes the `CNAME` file and Pages picks it up.
 
 ## Tests
 
