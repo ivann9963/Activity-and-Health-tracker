@@ -133,6 +133,36 @@ try {
   check('Fitbit data reaches the totals', /Racket|Tennis|RACKET/i.test(combined),
     combined.slice(0, 300));
 
+  // --- metric detail and goals ---
+  await page.locator('.nav-btn:has-text("Home")').click();
+  await page.waitForSelector('.metric-grid');
+  await page.locator('a.metric-tile').first().click();
+  await page.waitForSelector('#detail-chart svg', { timeout: 15000 });
+  const detail = await page.locator('#view-host').innerText();
+  check('a tile opens its own history', /Records/.test(detail), detail.slice(0, 200));
+  check('it opens on all time, so history is never hidden behind an empty period',
+    /best day/i.test(detail) && /all time/i.test(detail), detail.slice(0, 400));
+  check('records include streaks and best periods',
+    /longest day streak/i.test(detail) && /best month/i.test(detail), detail.slice(0, 400));
+  check('all four time ranges are offered',
+    (await page.locator('[data-detail]').count()) === 4);
+
+  // A goal is typed in the unit shown, not the unit stored.
+  await page.locator('#goal-input').fill('12');
+  await page.locator('#goal-save').click();
+  await page.waitForSelector('#goal-clear', { timeout: 10000 });
+  check('a goal can be saved and removed again', true);
+
+  await page.locator('.nav-btn:has-text("Home")').click();
+  await page.waitForSelector('.metric-grid');
+  await page.locator('.segmented button:has-text("Year")').click();
+  await page.waitForSelector('.meter', { timeout: 10000 });
+  check('the goal shows as a meter on the dashboard',
+    (await page.locator('.meter-fill').count()) >= 1);
+  const pace = await page.locator('.metric-tile:has(.meter)').first().innerText();
+  check('with a plain-language pace reading',
+    /pace|Goal met|of /.test(pace), pace.slice(0, 160));
+
   // --- year in review ---
   await page.locator('.nav-btn:has-text("Year")').click();
   await page.waitForSelector('.hero-figure', { timeout: 15000 });

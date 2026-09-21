@@ -375,3 +375,29 @@ pre.scroll { max-height: 260px; overflow-y: auto; }
               color: var(--text-dim); }
 .fact-value { font-size: 14px; font-variant-numeric: tabular-nums; }
 .months { margin-top: 14px; min-width: 320px; }
+
+/* --- goal meters --------------------------------------------------------------
+   The track is a lighter step of the fill's own hue, so the bar reads as a single
+   scale. The pace marker is where the calendar says you should be — without it the
+   meter only shows completion, which in March always looks like failure. */
+.meter { position: relative; height: 6px; border-radius: 3px; margin-top: 10px;
+         background: color-mix(in srgb, var(--accent) 18%, transparent); overflow: visible; }
+.meter-fill { height: 100%; border-radius: 3px; background: var(--accent-dim);
+              transition: width .3s; }
+.meter-fill.hit { background: var(--accent); }
+.meter-pace { position: absolute; top: -3px; width: 2px; height: 12px;
+              background: var(--text-dim); border-radius: 1px; }
+
+/* Tiles are links now; they must not look like link text. */
+a.metric-tile { color: inherit; text-decoration: none; display: flex; }
+a.metric-tile:hover { border-color: var(--accent); }
+
+/* --- goal editor --------------------------------------------------------------- */
+.goal-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            margin-top: var(--gap); }
+.goal-input { width: 110px; padding: 9px 10px; border-radius: 8px;
+              background: var(--surface-2); color: var(--text);
+              border: 1px solid var(--border); font-family: inherit; font-size: 15px;
+              font-variant-numeric: tabular-nums; }
+.goal-unit { color: var(--text-dim); font-size: 14px; margin-right: 4px; }
+.fact-value .subtle { font-weight: 400; margin-left: 4px; }

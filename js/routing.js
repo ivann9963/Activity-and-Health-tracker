@@ -10,6 +10,12 @@ function registerView(spec) {
   VIEWS.push(spec); // { id, label, icon, render(host), inNav }
 }
 
+// Segments after the view id: '#/metric/distance_run' -> routeParam(0) === 'distance_run'.
+function routeParam(index) {
+  const parts = (location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/');
+  return parts[index + 1] || null;
+}
+
 function currentViewId() {
   const id = (location.hash || '').replace(/^#\/?/, '').split('/')[0];
   return VIEWS.some(v => v.id === id) ? id : (VIEWS[0] && VIEWS[0].id);

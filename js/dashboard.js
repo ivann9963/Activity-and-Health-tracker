@@ -30,8 +30,9 @@ function renderDashboard(host) {
       return Promise.all([
         rollupAllMetrics(now.from, now.to, shown),
         rollupAllMetrics(prev.from, prev.to, shown),
-        bounds.from ? rollupAllMetrics(bounds.from, bounds.to || todayLocal(), shown) : null
-      ]).then(([current, previous, allTime]) => {
+        bounds.from ? rollupAllMetrics(bounds.from, bounds.to || todayLocal(), shown) : null,
+        loadGoals()
+      ]).then(([current, previous, allTime, goals]) => {
         host.innerHTML = `
           <div class="segmented" role="tablist">
             ${['week', 'month', 'year'].map(p => `
@@ -47,11 +48,11 @@ function renderDashboard(host) {
           </div>
 
           <div class="metric-grid">
-            ${shown.map(id => metricTileHtml(id, current[id], previous[id], now)).join('')}
+            ${shown.map(id => metricTileHtml(id, current[id], previous[id], now, goals, settings)).join('')}
           </div>
 
           <div class="customise-row">
-            <button class="btn-link" onclick="navigate('settings')">Choose which tiles to show</button>
+            <button class="btn-link" onclick="navigate('settings')">Goals and tiles</button>
           </div>
 
           ${allTime ? allTimeHtml(allTime, bounds, shown) : ''}`;
@@ -90,23 +91,55 @@ function periodLabel(bounds, period, firstDay) {
   return `${d.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
 }
 
-function metricTileHtml(id, current, previous, bounds) {
+function metricTileHtml(id, current, previous, bounds, goals, settings) {
   const metric = METRICS[id];
   const value = current && current.value;
   const prevValue = previous && previous.value;
   const empty = value == null || value === 0;
+  const goal = goals && goals[goalId(id, _period)];
 
-  return `<div class="metric-tile ${empty ? 'is-empty' : ''}">
+  return `<a class="metric-tile ${empty ? 'is-empty' : ''}" href="#/metric/${id}">
     <div class="metric-head">
       <span class="metric-icon" aria-hidden="true">${metric.icon}</span>
       <span class="metric-name">${escHtml(metric.label)}</span>
     </div>
     <div class="metric-value">${escHtml(formatMetric(id, value))}</div>
     ${empty ? '' : deltaHtml(id, value, prevValue) + barsHtml(id, current && current.byDay, bounds)}
-    ${metric.kind === 'total' && current && current.activeDays
-      ? `<div class="metric-sub">${current.activeDays} active day${current.activeDays === 1 ? '' : 's'}</div>`
+    ${goal ? goalMeterHtml(id, goal.target, value, bounds) : ''}
+    ${!goal && metric.kind === 'total' && current && current.activeDays
+      ? `<div class="metric-sub">${plural(current.activeDays, 'active day')}</div>`
       : ''}
-  </div>`;
+  </a>`;
+}
+
+// A meter rather than a second number: the question "am I on track" is about a
+// position along a length, and a bar answers it at a glance in a way "62%" does not.
+// The unfilled track is a lighter step of the same hue, so the whole bar reads as one
+// scale rather than as a fill sitting on unrelated grey.
+function goalMeterHtml(id, target, value, bounds) {
+  const p = goalProgress(target, value, bounds);
+  if (!p) return '';
+  // Where the calendar says you should be. Without it the bar shows completion, which
+  // in March always looks like failure.
+  const paceMark = Math.min(100, p.elapsed * 100);
+
+  return `<div class="meter" role="img"
+       aria-label="${escHtml(formatMetric(id, value))} of ${escHtml(formatMetric(id, target))}">
+      <div class="meter-fill ${p.hit ? 'hit' : ''}" style="width:${p.pct.toFixed(1)}%"></div>
+      ${p.finished ? '' : `<div class="meter-pace" style="left:${paceMark.toFixed(1)}%"></div>`}
+    </div>
+    <div class="metric-sub">${escHtml(paceText(id, p))}</div>`;
+}
+
+function paceText(id, p) {
+  if (p.hit) return `Goal met — ${formatMetric(id, p.target)}`;
+  if (p.finished) return `${formatMetric(id, p.value)} of ${formatMetric(id, p.target)}`;
+  const gap = Math.abs(p.ahead);
+  // Below a percent of the target the difference is noise, not a signal.
+  if (gap < p.target * 0.01) return `on pace for ${formatMetric(id, p.target)}`;
+  return p.ahead > 0
+    ? `${formatMetric(id, gap)} ahead of pace`
+    : `${formatMetric(id, gap)} behind pace`;
 }
 
 function deltaHtml(id, value, prevValue) {
