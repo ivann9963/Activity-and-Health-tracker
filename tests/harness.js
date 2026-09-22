@@ -72,6 +72,7 @@ function loadApp() {
       XmlTagScanner, xmlUnescape, parseAttrs,
       zipEntries, zipEntryText, zipEntryStream,
       parseAppleDate, AppleCollector, scanAppleExport, APPLE_DAILY_METRICS,
+      scanAppleWorkoutWindows, windowsFromSessions, insideWindow,
       sniffFile, humanSize,
       isTakeoutArchive, takeoutFolders, inspectTakeout, describeSample, importTakeout,
       parseFitbitDate, classifyFitbitFile, fitbitWeightUnit,

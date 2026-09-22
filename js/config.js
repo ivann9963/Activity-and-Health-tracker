@@ -44,6 +44,11 @@ const DEFAULT_SETTINGS = {
   // Metric ids the dashboard should not show. Not everyone does every sport, and a
   // permanently empty tile is worse than no tile — it reads as missing data.
   hiddenMetrics: [],
+  // Activities that are recorded but are not training. Walking is the default case:
+  // a phone logs the walk to the kitchen, and counting it makes every day look active
+  // and swamps every share of time. What belongs here is a judgement — some people
+  // walk deliberately and for hours — so it is a setting, not a rule.
+  notWorkouts: ['walking'],
   firstDayOfWeek: 'monday', // matches the sibling finance app's default
   theme: 'dark',
   sourcePriority: { ...DEFAULT_SOURCE_PRIORITY },

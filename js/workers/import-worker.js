@@ -39,13 +39,25 @@ self.onmessage = function (ev) {
 
   // A Takeout archive is thousands of small files rather than one huge one, so it
   // reports progress by file count and its own walker handles the streaming.
+  // Apple exports are read twice. The first pass reads only workouts, to learn when
+  // they happened; the second uses those windows so heart rate is banded during
+  // training rather than across the whole day. Skipping every Record makes the first
+  // pass a fraction of the second, and the alternative — holding every sample in
+  // memory until the workouts arrive at the end of the file — does not survive a
+  // decade of data on a phone.
   const parse = kind === 'fitbit-zip'
     ? importTakeout(file, entries, {
         importBatch: batch,
         onProgress: (done, total) => self.postMessage({ type: 'progress', done, total })
       })
     : openStream(file, kind, entry)
-        .then(stream => scanAppleExport(stream, { collect: true, importBatch: batch, onProgress }));
+        .then(stream => scanAppleWorkoutWindows(stream, {
+          onProgress: bytes => self.postMessage({ type: 'progress', bytes, phase: 'windows' })
+        }))
+        .then(workoutWindows => openStream(file, kind, entry)
+          .then(stream => scanAppleExport(stream, {
+            collect: true, importBatch: batch, workoutWindows, onProgress
+          })));
 
   parse
     .then(res => {

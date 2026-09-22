@@ -1005,6 +1005,59 @@ async function heartRateSpanTests() {
   });
 }
 
+// --- heart rate during workouts only ------------------------------------------------
+async function heartRateWindowTests() {
+  const bytes = new TextEncoder().encode(appleXml);
+  const makeStream = () => new ReadableStream({
+    start(c) { c.enqueue(bytes); c.close(); }
+  });
+
+  const windows = await app.scanAppleWorkoutWindows(makeStream());
+  const withWindows = await app.scanAppleExport(makeStream(), {
+    importBatch: 'w', workoutWindows: windows
+  });
+  const band = f => withWindows.daily.find(d => d.metric === 'hr_band_' + f);
+
+  suite('heart rate is banded only during workouts', () => {
+    ok('the first pass finds the workouts', windows.length >= 5, String(windows.length));
+    ok('and they are sorted and non-overlapping',
+       windows.every((w, i) => i === 0 || w[0] > windows[i - 1][1]));
+
+    // The fixture's readings sit inside the 18:00 run except the last, an hour later
+    // while sitting down. Without windows that idle hour contributed a capped five
+    // minutes to the 160 band; with them it contributes nothing.
+    eq('readings inside the workout still count', band(140).value, 180);
+    eq('the reading after it no longer credits an idle gap', band(160).value, 60);
+
+    // Everything that is not heart rate is unaffected.
+    eq('steps are untouched',
+       withWindows.daily.filter(d => d.metric === 'steps').length, 4);
+    eq('and so are workouts', withWindows.sessions.length, 6);
+  });
+
+  suite('workout windows', () => {
+    const sessions = [
+      { start: 1000, end: 2000 },
+      { start: 1500, end: 3000 },   // overlaps the first
+      { start: 900000, end: 901000 }
+    ];
+    const merged = app.windowsFromSessions(sessions, 0);
+    eq('overlapping copies of a workout merge into one window', merged.length, 2);
+    eq('and the merged window spans both', merged[0], [1000, 3000]);
+
+    ok('an instant inside is found', app.insideWindow(merged, 2500));
+    ok('one before is not', !app.insideWindow(merged, 500));
+    ok('one in the gap is not', !app.insideWindow(merged, 500000));
+    ok('one after is not', !app.insideWindow(merged, 1000000));
+    ok('the boundary counts', app.insideWindow(merged, 1000) && app.insideWindow(merged, 3000));
+    ok('nothing matches an empty list', !app.insideWindow([], 1500));
+
+    // A workout's heart rate starts before the watch is told the workout has begun.
+    const padded = app.windowsFromSessions([{ start: 100000, end: 200000 }], 60);
+    eq('windows are padded either side', padded[0], [40000, 260000]);
+  });
+}
+
 // --- insights ---------------------------------------------------------------------
 function insightsTests() {
   const S = (over) => ({ activity: 'running', localDate: '2026-03-02',
@@ -1015,9 +1068,17 @@ function insightsTests() {
     // session, so it is used rather than thrown away.
     eq('an unmapped Apple type becomes readable',
        app.humaniseRawActivity('HKWorkoutActivityTypeClimbing'), 'Climbing');
+    // Some vendor names read badly once they are on screen: "Cardio dance" is what
+    // Apple calls it, "Dance" is what the person did.
+    eq('awkward vendor names are renamed',
+       app.humaniseRawActivity('HKWorkoutActivityTypeCardioDance'), 'Dance');
+    eq('as are the other dance variants',
+       app.humaniseRawActivity('HKWorkoutActivityTypeSocialDance'), 'Dance');
     eq('camel case becomes words',
+       app.humaniseRawActivity('HKWorkoutActivityTypeWaterPolo'), 'Water polo');
+    eq('a renamed type wins over the generic rule',
        app.humaniseRawActivity('HKWorkoutActivityTypeCrossCountrySkiing'),
-       'Cross country skiing');
+       'Cross-country skiing');
     eq('a type that really is "other" has no better name',
        app.humaniseRawActivity('HKWorkoutActivityTypeOther'), null);
     eq('and nothing at all falls back', app.activityLabel('other', null), 'Unlabelled');
@@ -1052,9 +1113,13 @@ function insightsTests() {
     // Walking is ambient rather than chosen and swamps everything when included.
     const withWalk = [S({ activity: 'walking', durationSec: 36000 }),
                       S({ activity: 'running', durationSec: 3600 })];
-    eq('walking can be left out', app.timeByActivity(withWalk, { excludeWalking: true })
-       .map(s => s.activity), ['running']);
-    eq('or kept in', app.timeByActivity(withWalk).length, 2);
+    eq('an excluded activity is left out',
+       app.timeByActivity(withWalk, { exclude: ['walking'] }).map(s => s.activity), ['running']);
+    eq('or kept in when nothing is excluded', app.timeByActivity(withWalk).length, 2);
+    // The list is a setting, not a rule: somebody whose training is walking excludes
+    // something else instead.
+    eq('any activity can be the excluded one',
+       app.timeByActivity(withWalk, { exclude: ['running'] }).map(s => s.activity), ['walking']);
 
     eq('a superseded session never counts',
        app.timeByActivity([S({ durationSec: 3600, supersededBy: 'x' })]).length, 0);
@@ -1121,10 +1186,18 @@ function insightsTests() {
       S({ localDate: '2026-03-01', activity: 'walking' }),
       S({ localDate: '2026-03-02', activity: 'walking' }),
       S({ localDate: '2026-03-04', activity: 'strength' })
-    ], '2026-03-01', '2026-03-05');
+    ], '2026-03-01', '2026-03-05', ['walking']);
+
+    // With walking counted as training, the walking-only day becomes active.
+    const walkerDays = app.activeDays([
+      S({ localDate: '2026-03-01', activity: 'running' }),
+      S({ localDate: '2026-03-02', activity: 'walking' })
+    ], '2026-03-01', '2026-03-05', []);
+    eq('a walker who counts walking gets both days', walkerDays.active, 2);
+    eq('and nothing is set aside', walkerDays.ambientOnly, 0);
 
     eq('two genuinely active days', days.active, 2);
-    eq('one day of walking alone', days.walkingOnly, 1);
+    eq('one day of only uncounted activity', days.ambientOnly, 1);
     eq('and two with nothing at all', days.inactive, 2);
     eq('which adds up to the range', days.active + days.walkingOnly + days.inactive, days.total);
     eq('a day with both counts as active, not as walking-only', days.dates.has('2026-03-01'), true);
@@ -1142,6 +1215,7 @@ function insightsTests() {
     chartTests();
     insightsTests();
     await heartRateSpanTests();
+    await heartRateWindowTests();
     await zipTests();
     await takeoutTests();
     fitbitParseTests();

@@ -207,6 +207,11 @@ function importTakeout(file, entries, opts) {
       work.push({ entry: e, kind });
     }
 
+    // Exercise first, then everything else: heart rate is only banded inside a
+    // workout, and that cannot be decided until the workouts are known. Unlike the
+    // Apple export, the order here is ours to choose, so one pass suffices.
+    work.sort((a, b) => (a.kind === 'exercise' ? 0 : 1) - (b.kind === 'exercise' ? 0 : 1));
+
     let done = 0, failed = 0;
     const step = () => {
       if (!work.length) return Promise.resolve();
@@ -215,7 +220,9 @@ function importTakeout(file, entries, opts) {
         .then(text => {
           const data = JSON.parse(text);
           if (job.kind === 'weight') parseFitbitWeight(data, collector, weightUnit);
-          else FITBIT_PARSERS[job.kind](data, collector);
+          else if (job.kind === 'heart_rate') {
+            parseFitbitHeartRate(data, collector, windowsFromSessions(collector.sessions));
+          } else FITBIT_PARSERS[job.kind](data, collector);
         })
         .catch(err => {
           // One malformed file must not abandon an import of thousands. Count it,

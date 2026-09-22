@@ -68,6 +68,22 @@ function renderSettings(host) {
         </div>
 
         <div class="card">
+          <h2>What counts as a workout</h2>
+          <p class="subtle">Unticked activities still appear in your totals, but are
+             left out of active days and of where your time went. Walking is unticked
+             by default because a phone logs the walk to the kitchen — but if your
+             walking is training, tick it.</p>
+          ${Object.keys(ACTIVITIES).map(id => {
+            const off = (settings.notWorkouts || []).indexOf(id) !== -1;
+            return `<label class="field toggle-field">
+              <span>${ACTIVITIES[id].icon} ${escHtml(ACTIVITIES[id].label)}</span>
+              <input type="checkbox" class="workout-toggle" data-activity="${id}"
+                     ${off ? '' : 'checked'}>
+            </label>`;
+          }).join('')}
+        </div>
+
+        <div class="card">
           <h2>Which device to believe</h2>
           <p class="subtle">When two devices recorded the same thing, the higher-ranked one
              wins. This is a ranking, not a fixed choice: on any given day only the sources
@@ -173,6 +189,19 @@ function renderSettings(host) {
           setSetting('hiddenMetrics', next).then(() => {
             settings.hiddenMetrics = next;
             showToast(input.checked ? 'Tile shown' : 'Tile hidden', 'success');
+          });
+        };
+      });
+
+      host.querySelectorAll('.workout-toggle').forEach(input => {
+        input.onchange = () => {
+          const off = new Set(settings.notWorkouts || []);
+          if (input.checked) off.delete(input.dataset.activity);
+          else off.add(input.dataset.activity);
+          const next = [...off];
+          setSetting('notWorkouts', next).then(() => {
+            settings.notWorkouts = next;
+            showToast(input.checked ? 'Counted as a workout' : 'Not counted', 'success');
           });
         };
       });

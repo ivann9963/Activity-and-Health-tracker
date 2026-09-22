@@ -93,9 +93,13 @@ function parseInline(file, sniff, batch, cb) {
       onProgress: (done, total) => cb.onStage && cb.onStage(`Reading files (${done} of ${total})`)
     });
   }
+  // Same two passes as the worker; see the comment there for why.
   return appleXmlStream(file, sniff)
-    .then(stream => scanAppleExport(stream, { collect: true, importBatch: batch,
-                                              onProgress: cb.onProgress }));
+    .then(stream => scanAppleWorkoutWindows(stream, { onProgress: cb.onProgress }))
+    .then(workoutWindows => appleXmlStream(file, sniff)
+      .then(stream => scanAppleExport(stream, {
+        collect: true, importBatch: batch, workoutWindows, onProgress: cb.onProgress
+      })));
 }
 
 // Write in chunks. One transaction for 40,000 records is fine, but chunking keeps

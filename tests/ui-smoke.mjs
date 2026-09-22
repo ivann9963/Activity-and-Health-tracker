@@ -136,15 +136,17 @@ try {
 
   // --- insights ---
   await page.locator('.nav-btn:has-text("Insights")').click();
-  await page.waitForSelector('.share-row', { timeout: 15000 });
+  await page.waitForSelector('.card:has-text("Where the time went")', { timeout: 15000 });
   const insights = await page.locator('#view-host').innerText();
   check('the time share names where most of it went',
     /Mostly/i.test(insights) && /% of/.test(insights), insights.slice(0, 400));
   // Methodology stays available but no longer sits above the answer.
   check('the reasoning is one tap away rather than in the way',
     /how this is counted/i.test(insights));
-  check('active days separate deliberate activity from walking',
-    /active days/i.test(insights) && /walking only/i.test(insights));
+  check('active days separate deliberate activity from the rest',
+    /active days/i.test(insights) && /not counted/i.test(insights), insights.slice(0, 400));
+  check('where the time went renders as tiles',
+    (await page.locator('.card:has-text("Where the time went") .metric-tile').count()) >= 1);
   check('effort by sport reports a weighted average',
     /effort by sport/i.test(insights) && /bpm/.test(insights), insights.slice(0, 900));
   check('the period can be switched', (await page.locator('[data-insight]').count()) === 3);
@@ -154,11 +156,19 @@ try {
   await page.locator('#insight-prev').click();
   await page.waitForTimeout(300);
   await page.locator('#insight-prev').click();
-  await page.waitForSelector('#hr-threshold', { timeout: 15000 });
+  // The card renders even with nothing in it, so waiting for the card alone races the
+  // re-render. Wait for a band row, which only exists once the data is there.
+  await page.waitForFunction(() => {
+    const card = [...document.querySelectorAll('.card')]
+      .find(c => /Time by heart rate/.test(c.textContent));
+    return card && card.querySelectorAll('.share-row').length > 0;
+  }, null, { timeout: 15000 });
   const hr2024 = await page.locator('#view-host').innerText();
   check('stepping back reaches the heart-rate data',
     /above 140 bpm/i.test(hr2024), hr2024.slice(0, 500));
   check('and the bands are labelled as ranges', /140–159 bpm/.test(hr2024));
+  // The dropdown restated what the bands already showed.
+  check('no redundant threshold control', (await page.locator('#hr-threshold').count()) === 0);
 
   // --- metric detail and goals ---
   await page.locator('.nav-btn:has-text("Home")').click();
@@ -292,6 +302,10 @@ try {
   // The version line is how someone tells a stale checkout from a current one, so it
   // has to be right in both directions: a source copy must not claim to be a build,
   // and a build must not claim to be a source copy.
+  // What counts as a workout is a judgement, so it is configurable.
+  check('workout types can be configured',
+    (await page.locator('.workout-toggle').count()) >= 8);
+
   const version = await page.locator('#version-card').innerText();
   check(AGAINST_BUILD ? 'a build names its commit' : 'a source copy says it is one',
     AGAINST_BUILD ? /build [0-9a-f]{6,}/.test(version) : /development copy/.test(version),

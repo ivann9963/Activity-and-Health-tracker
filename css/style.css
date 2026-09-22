@@ -449,3 +449,6 @@ a.metric-tile:hover { border-color: var(--accent); }
 .why summary { font-size: 12px; color: var(--text-dim); }
 .why p { margin: 6px 0 0; font-size: 13px; }
 .src-count { opacity: .6; font-variant-numeric: tabular-nums; }
+/* An uncategorised group is reported, not hidden — but it should not look like a
+   sport you chose to do. */
+.metric-tile.is-unlabelled .metric-name { color: var(--warn); }

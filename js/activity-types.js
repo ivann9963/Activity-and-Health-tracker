@@ -54,12 +54,32 @@ const APPLE_ACTIVITY_MAP = {
 // that would explain it: a card reading "Other — 19% of your time" is useless, while
 // "Climbing — 19%" is an answer. Apple's own identifier is right there on the record,
 // so it is used rather than discarded.
+// Names a vendor uses that read badly once they are on screen. "Cardio dance" is what
+// Apple calls the type; "Dance" is what the person did.
+const RAW_ACTIVITY_NAMES = {
+  CardioDance: 'Dance',
+  SocialDance: 'Dance',
+  DanceInspiredTraining: 'Dance',
+  Dance: 'Dance',
+  MixedMetabolicCardioTraining: 'Mixed cardio',
+  PreparationAndRecovery: 'Warm-up and recovery',
+  HighIntensityIntervalTraining: 'HIIT',
+  TraditionalStrengthTraining: 'Strength training',
+  FunctionalStrengthTraining: 'Functional training',
+  WaterFitness: 'Water fitness',
+  PlayGround: 'Play',
+  SnowSports: 'Snow sports',
+  CrossCountrySkiing: 'Cross-country skiing',
+  DownhillSkiing: 'Skiing'
+};
+
 function humaniseRawActivity(raw) {
   if (!raw) return null;
   const bare = String(raw)
     .replace(/^HKWorkoutActivityType/, '')
     .replace(/^HKWorkoutActivity/, '');
   if (!bare || bare === 'Other') return null;
+  if (RAW_ACTIVITY_NAMES[bare]) return RAW_ACTIVITY_NAMES[bare];
   // CamelCase to words: "TraditionalStrengthTraining" -> "Traditional strength training"
   const words = bare.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);

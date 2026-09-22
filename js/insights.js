@@ -20,16 +20,25 @@ function timeByActivity(sessions, opts) {
     if (!counted(s)) continue;
     const seconds = s.durationSec || 0;
     if (seconds <= 0) continue;
-    // Walking is usually ambient rather than chosen, and counting it swamps
-    // everything else. Callers decide; the year review leaves it out.
-    if (o.excludeWalking && s.activity === 'walking') continue;
+    // What is ambient rather than chosen is the user's call — see settings.notWorkouts.
+    if (o.exclude && o.exclude.indexOf(s.activity) !== -1) continue;
 
     // Unrecognised workouts group by their own type rather than pooling into one
     // "Other" bar, which would hide the only thing that explains them.
-    const key = activityGroupKey(s.activity, s.rawActivity);
+    const named = activityLabel(s.activity, s.rawActivity);
+    // Where the source recorded no category at all, group by the source instead of
+    // pooling every uncategorised workout from every device into one anonymous bar.
+    const unlabelled = named === 'Unlabelled';
+    const label = unlabelled ? `Uncategorised · ${sourceLabel(s.source)}` : named;
+    const key = unlabelled ? 'unlabelled:' + sourceLabel(s.source)
+                           : activityGroupKey(s.activity, s.rawActivity);
+
     const entry = totals.get(key) ||
-      { seconds: 0, activity: s.activity, label: activityLabel(s.activity, s.rawActivity) };
+      { seconds: 0, activity: s.activity, label, unlabelled, sessions: [] };
     entry.seconds += seconds;
+    // Kept so the interface can show what is actually in an uncategorised group:
+    // without it the user has a number and no way to find out what it is.
+    if (unlabelled && entry.sessions.length < 50) entry.sessions.push(s);
     totals.set(key, entry);
     grand += seconds;
   }
@@ -39,7 +48,9 @@ function timeByActivity(sessions, opts) {
       activity: entry.activity,
       key,
       label: entry.label,
-      icon: (ACTIVITIES[entry.activity] || {}).icon || '💪',
+      icon: entry.unlabelled ? '❓' : ((ACTIVITIES[entry.activity] || {}).icon || '💪'),
+      unlabelled: entry.unlabelled,
+      sessions: entry.sessions,
       seconds: entry.seconds,
       pct: grand > 0 ? (entry.seconds / grand) * 100 : 0
     }))
@@ -140,19 +151,18 @@ function bestPaces(sessions, activity, limit) {
 }
 
 // --- active days ------------------------------------------------------------------------
-// "Active" means a deliberate activity, which is why walking does not qualify: a day
-// spent entirely at a desk still records a walk to the kitchen, and counting it would
-// make every day look active and the measure worthless.
-const AMBIENT_ACTIVITIES = new Set(['walking']);
-
-function activeDays(sessions, fromDate, toDate) {
+// "Active" means a deliberate activity. Which activities are deliberate is a
+// judgement rather than a fact — most people's walking is ambient, some people's is
+// the training — so the caller supplies the list and it comes from settings.
+function activeDays(sessions, fromDate, toDate, notWorkouts) {
+  const ambient = new Set(notWorkouts || ['walking']);
   const active = new Set();
   const ambientOnly = new Set();
 
   for (const s of sessions) {
     if (!counted(s)) continue;
     if (s.localDate < fromDate || s.localDate > toDate) continue;
-    if (AMBIENT_ACTIVITIES.has(s.activity)) ambientOnly.add(s.localDate);
+    if (ambient.has(s.activity)) ambientOnly.add(s.localDate);
     else active.add(s.localDate);
   }
   for (const day of active) ambientOnly.delete(day);
@@ -160,7 +170,8 @@ function activeDays(sessions, fromDate, toDate) {
   const total = dateRange(fromDate, toDate).length;
   return {
     active: active.size,
-    walkingOnly: ambientOnly.size,
+    ambientOnly: ambientOnly.size,
+    walkingOnly: ambientOnly.size,   // kept for the existing callers
     inactive: total - active.size - ambientOnly.size,
     total,
     pct: total > 0 ? (active.size / total) * 100 : 0,

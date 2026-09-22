@@ -45,8 +45,9 @@ function renderInsights(host) {
 }
 
 function insightsHtml(sessions, hrBands, paceSessions, range, settings) {
-  const share = timeByActivity(sessions, { excludeWalking: true });
-  const days = activeDays(sessions, range.from, range.to);
+  const notWorkouts = settings.notWorkouts || [];
+  const share = timeByActivity(sessions, { exclude: notWorkouts });
+  const days = activeDays(sessions, range.from, range.to, notWorkouts);
   const hr = avgHrByActivity(sessions);
   const totalSeconds = share.reduce((n, s) => n + s.seconds, 0);
 
@@ -77,22 +78,52 @@ function shareCardHtml(share, totalSeconds) {
       <p class="subtle">No workouts recorded in this period.</p></div>`;
   }
   const top = share[0];
+  const unlabelled = share.filter(s => s.unlabelled);
+
   return `<div class="card">
     <h2>Where the time went</h2>
     <p class="headline">Mostly ${top.icon} <strong>${escHtml(top.label)}</strong> —
        ${Math.round(top.pct)}% of ${escHtml(formatMetric('time_gym', totalSeconds))}.</p>
-    ${share.map(s => `
-      <div class="share-row">
-        <span class="share-label">${s.icon} ${escHtml(s.label)}</span>
-        <span class="share-value">${escHtml(formatMetric('time_gym', s.seconds))}
-          <span class="share-pct">${Math.round(s.pct)}%</span></span>
-        <div class="share-track"><div class="share-fill" style="width:${s.pct.toFixed(1)}%"></div></div>
+    <div class="metric-grid">
+      ${share.map(s => `<div class="metric-tile ${s.unlabelled ? 'is-unlabelled' : ''}">
+        <div class="metric-head">
+          <span class="metric-icon" aria-hidden="true">${s.icon}</span>
+          <span class="metric-name">${escHtml(s.label)}</span>
+        </div>
+        <div class="metric-value">${escHtml(formatMetric('time_gym', s.seconds))}</div>
+        <div class="metric-delta neutral">${Math.round(s.pct)}% of your time</div>
       </div>`).join('')}
+    </div>
+    ${unlabelled.length ? unlabelledDetailHtml(unlabelled) : ''}
     <details class="why"><summary>How this is counted</summary>
       <p class="subtle">Share of time, not number of sessions — twelve short runs and
-         twelve long gym sessions are not the same period. Walking is excluded: it is
-         ambient rather than chosen, and it swamps everything else.</p></details>
+         twelve long gym sessions are not the same period. Anything set aside under
+         Settings → What counts as a workout is left out.</p></details>
   </div>`;
+}
+
+// An uncategorised group is a number with no explanation attached. The sessions behind
+// it are the explanation, so they are one tap away rather than unreachable.
+function unlabelledDetailHtml(groups) {
+  const all = groups.reduce((rows, g) => rows.concat(g.sessions), [])
+    .sort((a, b) => b.start - a.start);
+  return `<details class="why">
+    <summary>What is uncategorised? (${plural(all.length, 'workout')})</summary>
+    <p class="subtle">These were recorded without a sport. The device that logged them
+       did not say what they were, so neither can this app — but here they are, and the
+       date and time usually give it away.</p>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>When</th><th class="num">Length</th><th>Recorded by</th></tr></thead>
+      <tbody>${all.slice(0, 25).map(s => `<tr>
+        <td class="nowrap">${escHtml(s.localDate)}
+          <span class="subtle">${escHtml(new Date(s.start)
+            .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</span></td>
+        <td class="num">${escHtml(formatMetric('time_gym', s.durationSec))}</td>
+        <td class="subtle">${escHtml(sourceLabel(s.source))}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    ${all.length > 25 ? `<p class="subtle">Showing the most recent 25.</p>` : ''}
+  </details>`;
 }
 
 function activeDaysCardHtml(d) {
@@ -100,13 +131,14 @@ function activeDaysCardHtml(d) {
     <h2>Active days</h2>
     <div class="stat-row">
       ${statTile('Active', String(d.active), `${Math.round(d.pct)}% of ${d.total} days`)}
-      ${statTile('Walking only', String(d.walkingOnly), '')}
+      ${statTile('Not counted', String(d.ambientOnly), 'set in Settings')}
       ${statTile('Nothing recorded', String(d.inactive), '')}
     </div>
     <details class="why"><summary>What counts as active</summary>
-      <p class="subtle">Something deliberate. Walking alone does not qualify — a day at
-         a desk still records a walk to the kitchen, and counting it would make every
-         day look active.</p></details>
+      <p class="subtle">Something deliberate. By default walking does not qualify — a
+         day at a desk still records a walk to the kitchen, and counting it would make
+         every day look active. Change which activities count under
+         Settings → What counts as a workout.</p></details>
   </div>`;
 }
 
@@ -123,20 +155,13 @@ function hrBandCardHtml(bands) {
          it arrives with the next import.</p></div>`;
   }
 
-  const above = rows.filter(r => r.floor >= _hrThreshold).reduce((n, r) => n + r.seconds, 0);
+  const hard = rows.filter(r => r.floor >= 140).reduce((n, r) => n + r.seconds, 0);
   const max = Math.max(...rows.map(r => r.seconds));
 
   return `<div class="card">
     <h2>Time by heart rate</h2>
-    <div class="field" style="border:none">
-      <span>Time above</span>
-      <select id="hr-threshold">
-        ${HR_BANDS.filter(f => f > 0).map(f =>
-          `<option value="${f}" ${f === _hrThreshold ? 'selected' : ''}>${f} bpm</option>`).join('')}
-      </select>
-    </div>
-    <div class="hero-inline">${escHtml(formatMetric('time_gym', above))}
-      <span class="subtle">above ${_hrThreshold} bpm</span></div>
+    <div class="hero-inline">${escHtml(formatMetric('time_gym', hard))}
+      <span class="subtle">above 140 bpm</span></div>
     ${rows.filter(r => r.seconds > 0).reverse().map(r => `
       <div class="share-row">
         <span class="share-label">${escHtml(r.label)}</span>

@@ -53,10 +53,52 @@ const WORKOUT_STAT_FIELDS = {
 // was not on a wrist and the gap is absence of data, not a long slow heartbeat.
 const HR_GAP_CAP_MS = 5 * 60 * 1000;
 
+// Is an instant inside any workout? Windows are sorted and non-overlapping after
+// merging, so this is a binary search rather than a scan — heart-rate samples are the
+// most numerous record in an export and a linear check per sample would dominate the
+// whole import.
+function insideWindow(windows, ms) {
+  let lo = 0, hi = windows.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const w = windows[mid];
+    if (ms < w[0]) hi = mid - 1;
+    else if (ms > w[1]) lo = mid + 1;
+    else return true;
+  }
+  return false;
+}
+
+// Merge sessions into sorted, non-overlapping intervals. Overlapping copies of the
+// same workout from two sources would otherwise make the search ambiguous.
+function windowsFromSessions(sessions, padSec) {
+  const pad = (padSec == null ? 60 : padSec) * 1000;
+  const sorted = sessions
+    .filter(s => s.start && s.end && s.end > s.start)
+    .map(s => [s.start - pad, s.end + pad])
+    .sort((a, b) => a[0] - b[0]);
+
+  const merged = [];
+  for (const w of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && w[0] <= last[1]) last[1] = Math.max(last[1], w[1]);
+    else merged.push(w);
+  }
+  return merged;
+}
+
 class AppleCollector {
   constructor(opts) {
     const o = opts || {};
     this.collect = o.collect !== false;
+    // Pass one of two: only workouts are read, to learn when they happened. An Apple
+    // export lists records before workouts, so a single pass cannot know whether a
+    // heart-rate sample falls inside one.
+    this.windowsOnly = !!o.windowsOnly;
+    // Pass two: heart rate is banded only inside these. Without them, a day's bands
+    // are dominated by sitting still — thousands of hours below 100bpm that say
+    // nothing about training.
+    this.workoutWindows = o.workoutWindows || null;
     this.importBatch = o.importBatch || null;
     this.importedAt = o.importedAt || Date.now();
 
@@ -128,6 +170,7 @@ class AppleCollector {
   }
 
   _record(attrs) {
+    if (this.windowsOnly) return;
     const type = attrs.type;
     if (!type) return;
     this.tally.records++;
@@ -174,6 +217,14 @@ class AppleCollector {
     const dateKey = localDateOf(start.ms, start.offsetMin);
     this._note('HKQuantityTypeIdentifierHeartRate', dateKey, label, attrs.unit);
     if (!isFinite(bpm) || bpm <= 0) return;
+
+    // Only heart rate recorded during a workout counts. Everything else is sitting,
+    // sleeping and standing about, which swamps the bands and answers no question
+    // anyone asked of a training log.
+    if (this.workoutWindows && !insideWindow(this.workoutWindows, start.ms)) {
+      this.lastHr.delete(label);
+      return;
+    }
 
     const previous = this.lastHr.get(label);
 
@@ -255,6 +306,15 @@ class AppleCollector {
       meta: this.meta
     };
   }
+}
+
+// The workout windows in an export, read on their own. Cheap: every Record is
+// skipped, so this is a fraction of the cost of a full parse.
+function scanAppleWorkoutWindows(stream, opts) {
+  const o = opts || {};
+  const collector = new AppleCollector({ ...o, collect: true, windowsOnly: true });
+  return scanXmlStream(stream, (n, a, k) => collector.onTag(n, a, k), o.onProgress)
+    .then(() => windowsFromSessions(collector.finish().sessions, o.padSec));
 }
 
 // Run a full pass over an Apple export stream. `opts.collect === false` inspects only.

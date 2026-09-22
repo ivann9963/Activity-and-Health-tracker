@@ -175,11 +175,13 @@ function parseFitbitExercise(data, out) {
 // a few seconds a day, which is not worth carrying state between files to recover.
 const FITBIT_HR_GAP_CAP_MS = 5 * 60 * 1000;
 
-function parseFitbitHeartRate(data, out) {
+function parseFitbitHeartRate(data, out, workoutWindows) {
   let previous = null;
   for (const row of asArray(data)) {
     const when = parseFitbitDate(row.dateTime || row.date);
     if (!when) continue;
+    // Only during a workout — the rest is sitting still, and it drowns the bands.
+    if (workoutWindows && !insideWindow(workoutWindows, when.ms)) { previous = null; continue; }
     const bpm = Number(row.value && typeof row.value === 'object' ? row.value.bpm : row.value);
     if (!isFinite(bpm) || bpm <= 0) { previous = null; continue; }
 

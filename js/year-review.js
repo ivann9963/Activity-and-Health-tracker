@@ -58,10 +58,10 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
   // definition rather than counting any day with steps on it: a day at a desk still
   // records a walk to the kitchen. Where there are no sessions at all — someone who
   // has only ever imported step counts — it falls back rather than reporting zero.
-  const days = activeDays(sessions, `${year}-01-01`, `${year}-12-31`);
+  const days = activeDays(sessions, `${year}-01-01`, `${year}-12-31`, settings.notWorkouts);
   let activeCount = days.active;
-  let activeQualifier = days.walkingOnly
-    ? `${plural(days.walkingOnly, 'further day')} saw walking only.` : '';
+  let activeQualifier = days.ambientOnly
+    ? `${plural(days.ambientOnly, 'further day')} saw only activities you do not count.` : '';
 
   if (!activeCount) {
     const fallback = new Set();
@@ -78,7 +78,7 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
 
   const daysInYear = days.total;
   const movingSec = sessions.reduce((n, s) => n + (s.durationSec || 0), 0);
-  const share = timeByActivity(sessions, { excludeWalking: true });
+  const share = timeByActivity(sessions, { exclude: settings.notWorkouts || [] });
   // The shares are percentages of the walking-excluded total, so that is what they
   // have to be quoted against — movingSec includes walking and would make the
   // percentages describe a figure they were not computed from.
@@ -115,7 +115,7 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
           <div class="share-track"><div class="share-fill"
             style="width:${a.pct.toFixed(1)}%"></div></div>
         </div>`).join('')}
-      <p class="subtle">Walking is left out — it is ambient rather than chosen.</p>
+      <p class="subtle">Activities set aside in Settings are left out.</p>
     </div>` : ''}
 
     ${shown.filter(id => METRICS[id].kind === 'total')
