@@ -46,6 +46,29 @@ function activityGroupsPresent(sessions) {
   return [...groups.values()].sort((a, b) => b.seconds - a.seconds);
 }
 
+// --- effort ---------------------------------------------------------------------
+// Time in each heart-rate band, summed over the workouts in a period. Reading it off
+// the sessions rather than off the day is what makes it agree with everything else on
+// the screen: an activity set aside takes its heart rate with it, and a losing copy of
+// a duplicated workout contributes nothing.
+function hrBandTotals(sessions, opts) {
+  const o = opts || {};
+  const totals = new Map();
+  for (const s of sessions) {
+    if (!counted(s) || !s.hrBands) continue;
+    if (isExcluded(s, o.exclude)) continue;
+    for (const floor of Object.keys(s.hrBands)) {
+      const n = Number(floor);
+      totals.set(n, (totals.get(n) || 0) + s.hrBands[floor]);
+    }
+  }
+  return HR_BANDS.map(floor => ({
+    floor,
+    label: hrBandLabel(floor),
+    seconds: totals.get(floor) || 0
+  }));
+}
+
 // --- where the time goes ------------------------------------------------------------
 // The answer to "what did I actually spend the year doing". Share of time, not share
 // of sessions: twelve short runs and twelve long gym sessions are not the same year.

@@ -163,6 +163,7 @@ function createFitbitCollector(batch, importedAt) {
   const buckets = new DailyBuckets();
   const sessions = [];
   const notes = Object.create(null);
+  const bands = new Map();   // sessionId -> { bandFloor: seconds }
   const source = { vendor: 'fitbit', app: 'Google Health', device: 'Fitbit' };
 
   return {
@@ -173,8 +174,21 @@ function createFitbitCollector(batch, importedAt) {
     addSession(raw) {
       sessions.push(makeSession({ ...raw, importBatch: batch, importedAt }));
     },
+    // Banded heart rate belongs to the workout it was recorded during, so that an
+    // activity set aside takes its heart rate with it.
+    band(sessionId, bpm, seconds) {
+      if (!sessionId || !(seconds > 0)) return;
+      const b = bands.get(sessionId) || {};
+      const floor = hrBandFor(bpm);
+      b[floor] = (b[floor] || 0) + seconds;
+      bands.set(sessionId, b);
+    },
     note(key) { notes[key] = (notes[key] || 0) + 1; },
     finish() {
+      for (const session of sessions) {
+        const b = bands.get(session.id);
+        if (b) session.hrBands = b;
+      }
       return { sessions, daily: buckets.toRecords(batch, importedAt), notes };
     }
   };
@@ -212,6 +226,10 @@ function importTakeout(file, entries, opts) {
     // Apple export, the order here is ours to choose, so one pass suffices.
     work.sort((a, b) => (a.kind === 'exercise' ? 0 : 1) - (b.kind === 'exercise' ? 0 : 1));
 
+    // Every workout is known before the first heart-rate file is opened, so the
+    // windows are built once rather than rebuilt per file — there are thousands of
+    // daily heart-rate files in a long-lived account.
+    let windows = null;
     let done = 0, failed = 0;
     const step = () => {
       if (!work.length) return Promise.resolve();
@@ -221,7 +239,8 @@ function importTakeout(file, entries, opts) {
           const data = JSON.parse(text);
           if (job.kind === 'weight') parseFitbitWeight(data, collector, weightUnit);
           else if (job.kind === 'heart_rate') {
-            parseFitbitHeartRate(data, collector, windowsFromSessions(collector.sessions));
+            if (!windows) windows = windowsFromSessions(collector.sessions);
+            parseFitbitHeartRate(data, collector, windows);
           } else FITBIT_PARSERS[job.kind](data, collector);
         })
         .catch(err => {

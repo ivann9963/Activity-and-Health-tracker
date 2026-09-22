@@ -32,23 +32,24 @@ function renderInsights(host) {
 
     return Promise.all([
       dbRange('sessions', 'byDate', range.from, range.to),
-      rollupAllMetrics(range.from, range.to, HR_BANDS.map(hrBandMetric)),
       // Pace deserves a longer view than one period: a trend over three months is a
       // trend, a trend over one week is noise.
       dbRange('sessions', 'byDate', addDays(range.to, -730), range.to)
-    ]).then(([sessions, hrBands, paceSessions]) => {
-      host.innerHTML = insightsHtml(sessions, hrBands, paceSessions, range, settings);
+    ]).then(([sessions, paceSessions]) => {
+      host.innerHTML = insightsHtml(sessions, paceSessions, range, settings);
       drawInsightCharts(paceSessions);
       wireInsights(firstDay);
     });
   });
 }
 
-function insightsHtml(sessions, hrBands, paceSessions, range, settings) {
+function insightsHtml(sessions, paceSessions, range, settings) {
   const notWorkouts = settings.notWorkouts || [];
   const share = timeByActivity(sessions, { exclude: notWorkouts });
   const days = activeDays(sessions, range.from, range.to, notWorkouts);
   const hr = avgHrByActivity(sessions);
+  // Same exclusion list as the share: an activity set aside leaves the bands too.
+  const bands = hrBandTotals(sessions, { exclude: notWorkouts });
   const totalSeconds = share.reduce((n, s) => n + s.seconds, 0);
   // What was set aside, named — a hidden thing with no way back is a bug, not a setting.
   const hidden = activityGroupsPresent(sessions)
@@ -70,7 +71,7 @@ function insightsHtml(sessions, hrBands, paceSessions, range, settings) {
 
     ${shareCardHtml(share, totalSeconds, hidden)}
     ${activeDaysCardHtml(days)}
-    ${hrBandCardHtml(hrBands)}
+    ${hrBandCardHtml(bands)}
     ${hrByActivityCardHtml(hr)}
     ${paceCardHtml(paceSessions)}`;
 }
@@ -156,17 +157,12 @@ function activeDaysCardHtml(d) {
   </div>`;
 }
 
-function hrBandCardHtml(bands) {
-  const rows = HR_BANDS.map(floor => ({
-    floor,
-    label: hrBandLabel(floor),
-    seconds: (bands[hrBandMetric(floor)] && bands[hrBandMetric(floor)].value) || 0
-  }));
+function hrBandCardHtml(rows) {
   const total = rows.reduce((n, r) => n + r.seconds, 0);
   if (!total) {
     return `<div class="card"><h2>Time by heart rate</h2>
-      <p class="subtle">No heart-rate data in this period. Apple Health exports carry it;
-         it arrives with the next import.</p></div>`;
+      <p class="subtle">No heart-rate data in this period. Apple Health and Google
+         Health exports both carry it; it arrives with the next import.</p></div>`;
   }
 
   const REPORTED_FLOOR = 100;
@@ -191,12 +187,15 @@ function hrBandCardHtml(bands) {
       <p class="subtle">Only heart rate recorded during a workout is counted — the rest
          of the day is sitting still and would drown everything else.</p>
       <p class="subtle">Bands are exclusive, so any threshold is the sum of the bands
-         above it. Each reading counts for the gap until the next one, capped at five
-         minutes — a longer gap means the watch was off, not a slow heartbeat.</p>
+         above it. Each reading counts for the gap until the next one of the same
+         workout, capped at five minutes — a longer gap means the watch was off, not a
+         slow heartbeat.</p>
+      <p class="subtle">Counted per workout rather than per day, so anything set aside
+         under Settings → What counts as a workout leaves this too.</p>
       ${belowFloor ? `<p class="subtle">Below ${REPORTED_FLOOR} bpm:
         ${escHtml(formatMetric('time_gym', belowFloor))} — warm-ups, rests between sets
-        and the walk to the car. Not shown, because it dwarfs the rest and says
-        nothing about effort.</p>` : ''}
+        and the walk to the car. Counted, but left off the chart: over a full history
+        it is most of the time recorded, and it would flatten every other band.</p>` : ''}
     </details>
   </div>`;
 }

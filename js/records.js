@@ -57,6 +57,10 @@ function makeSession(raw) {
     distanceM: raw.distanceM != null ? raw.distanceM : null,
     energyKcal: raw.energyKcal != null ? raw.energyKcal : null,
     avgHr: raw.avgHr != null ? raw.avgHr : null,
+    // { bandFloor: seconds } for the heart rate recorded during this workout, filled
+    // in by the importer once it knows the spans. Not part of the id: two exports of
+    // the same workout must still collide, and a longer export carries more samples.
+    hrBands: raw.hrBands || null,
     source: raw.source,
     localDate: null,
     importBatch: raw.importBatch || null,

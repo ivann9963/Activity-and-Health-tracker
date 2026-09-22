@@ -72,7 +72,7 @@ function loadApp() {
       XmlTagScanner, xmlUnescape, parseAttrs,
       zipEntries, zipEntryText, zipEntryStream,
       parseAppleDate, AppleCollector, scanAppleExport, APPLE_DAILY_METRICS,
-      scanAppleWorkoutWindows, windowsFromSessions, insideWindow,
+      scanAppleWorkoutWindows, windowsFromSessions, insideWindow, windowAt,
       sniffFile, humanSize,
       isTakeoutArchive, takeoutFolders, inspectTakeout, describeSample, importTakeout,
       parseFitbitDate, classifyFitbitFile, fitbitWeightUnit,
@@ -89,7 +89,7 @@ function loadApp() {
       dayStreaks, weekStreaks, bestDay, bestPeriod, activeThreshold,
       niceTarget, deriveTarget, goalProgress,
       timeByActivity, avgHrByActivity, sessionPace, formatPace, paceProgression,
-      bestPaces, activeDays, sessionKey, isExcluded, activityGroupsPresent,
+      bestPaces, activeDays, sessionKey, isExcluded, activityGroupsPresent, hrBandTotals,
       DEFAULT_SETTINGS
     };`, sandbox, { filename: 'app-bundle.js' });
 

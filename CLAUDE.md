@@ -40,6 +40,16 @@ plausible and are wrong.
 - **Unknown units yield `null`, never a guess.** Same for a weight whose unit the
   export does not state.
 - Nothing is ever deleted by dedupe; losers carry `supersededBy` and a readable reason.
+- **Heart-rate bands live on the session, not on the day.** A day holding a run and a
+  gym session contains two different efforts. Storing them per day also meant the
+  per-day source election — which exists for step counts — threw away one device's
+  heart rate whenever two devices recorded different workouts on the same day. Because
+  the importer credits time to whichever copy of a workout owned the clock, and that
+  need not be the copy dedupe keeps, **the winner inherits the fullest band set in its
+  group** (`dedupe/sessions.js`); the richest set, never the sum.
+- **A reading is worth the gap to the next reading of the SAME workout.** Across a
+  boundary it is worth nothing. Closing the last reading of a workout against the end
+  of the workout would invent up to five minutes of effort per session.
 
 ## Testing
 

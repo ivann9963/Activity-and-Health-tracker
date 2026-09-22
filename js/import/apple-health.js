@@ -53,38 +53,79 @@ const WORKOUT_STAT_FIELDS = {
 // was not on a wrist and the gap is absence of data, not a long slow heartbeat.
 const HR_GAP_CAP_MS = 5 * 60 * 1000;
 
-// Is an instant inside any workout? Windows are sorted and non-overlapping after
-// merging, so this is a binary search rather than a scan — heart-rate samples are the
-// most numerous record in an export and a linear check per sample would dominate the
-// whole import.
-function insideWindow(windows, ms) {
+// Which workout was happening at this instant, if any? Windows are sorted and
+// non-overlapping, so this is a binary search rather than a scan — heart-rate samples
+// are the most numerous record in an export and a linear check per sample would
+// dominate the whole import.
+function windowAt(windows, ms) {
   let lo = 0, hi = windows.length - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     const w = windows[mid];
     if (ms < w[0]) hi = mid - 1;
     else if (ms > w[1]) lo = mid + 1;
-    else return true;
+    else return w;
   }
-  return false;
+  return null;
 }
 
-// Merge sessions into sorted, non-overlapping intervals. Overlapping copies of the
-// same workout from two sources would otherwise make the search ambiguous.
+function insideWindow(windows, ms) { return windowAt(windows, ms) != null; }
+
+// Sessions become sorted, non-overlapping intervals, each still naming the workout it
+// came from — banded time is credited to a session, not just to a day, so that hiding
+// an activity hides its heart rate too.
+//
+// Overlaps have to be resolved rather than merged, because a merged interval cannot
+// say whose it is. Two cases look alike and are not: two sources' copies of the same
+// run (either answer is right, they dedupe later), and a half-hour run logged inside a
+// two-hour walk (only one answer is right). The shorter workout wins the overlapping
+// stretch, which settles both — the specific beats the containing.
 function windowsFromSessions(sessions, padSec) {
   const pad = (padSec == null ? 60 : padSec) * 1000;
-  const sorted = sessions
-    .filter(s => s.start && s.end && s.end > s.start)
-    .map(s => [s.start - pad, s.end + pad])
-    .sort((a, b) => a[0] - b[0]);
+  const spans = sessions
+    .filter(s => s.start != null && s.end != null && s.end > s.start)
+    .map(s => ({ from: s.start - pad, to: s.end + pad, id: s.id,
+                 length: s.end - s.start }));
+  if (!spans.length) return [];
 
-  const merged = [];
-  for (const w of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && w[0] <= last[1]) last[1] = Math.max(last[1], w[1]);
-    else merged.push(w);
+  // A sweep line: at every point where the set of workouts in progress changes, the
+  // shortest one in progress owns the stretch until the next change.
+  const events = [];
+  for (const sp of spans) {
+    events.push({ at: sp.from, open: true, span: sp });
+    events.push({ at: sp.to, open: false, span: sp });
   }
-  return merged;
+  // Closes before opens at the same instant, so a workout ending where another begins
+  // does not briefly look like an overlap.
+  events.sort((a, b) => a.at - b.at || (a.open ? 1 : 0) - (b.open ? 1 : 0));
+
+  const painted = [];
+  const active = [];
+  let at = events[0].at;
+
+  for (const ev of events) {
+    if (ev.at > at && active.length) {
+      // Whoever is shortest owns [at, ev.at]. Ties go to the earlier start so the
+      // result does not depend on the order sessions happened to be collected in.
+      let owner = active[0];
+      for (const sp of active) {
+        if (sp.length < owner.length ||
+            (sp.length === owner.length && sp.from < owner.from)) owner = sp;
+      }
+      const last = painted[painted.length - 1];
+      // Consecutive stretches with the same owner are one interval; without this a
+      // workout overlapped in the middle would come back as three.
+      if (last && last[2] === owner.id && last[1] >= at) last[1] = ev.at;
+      else painted.push([at, ev.at, owner.id]);
+    }
+    at = ev.at;
+    if (ev.open) active.push(ev.span);
+    else {
+      const i = active.indexOf(ev.span);
+      if (i !== -1) active.splice(i, 1);
+    }
+  }
+  return painted;
 }
 
 class AppleCollector {
@@ -103,6 +144,10 @@ class AppleCollector {
     this.importedAt = o.importedAt || Date.now();
 
     this.sessions = [];
+    // sessionId -> { bandFloor: seconds }. Banded time belongs to the workout it was
+    // recorded during, not to the day: a day holding a run and a gym session has two
+    // different efforts in it, and only the session knows which is which.
+    this.sessionBands = new Map();
     this.buckets = new DailyBuckets();
     this.currentWorkout = null;
     this.lastHr = new Map();   // source label -> the previous reading, awaiting its span
@@ -207,7 +252,7 @@ class AppleCollector {
     this._add(spec.metric, dateKey, source, value, spec.agg, start.ms);
   }
 
-  // Time spent in each heart-rate band, accumulated per day.
+  // Time spent in each heart-rate band, credited to the workout it happened during.
   //
   // Readings are held back by one: a sample's duration only becomes known when the
   // next one arrives. Tracked per source, because an Apple Watch and a relayed Fitbit
@@ -221,10 +266,12 @@ class AppleCollector {
     // Only heart rate recorded during a workout counts. Everything else is sitting,
     // sleeping and standing about, which swamps the bands and answers no question
     // anyone asked of a training log.
-    if (this.workoutWindows && !insideWindow(this.workoutWindows, start.ms)) {
+    const window = this.workoutWindows ? windowAt(this.workoutWindows, start.ms) : null;
+    if (this.workoutWindows && !window) {
       this.lastHr.delete(label);
       return;
     }
+    const owner = window ? window[2] : null;
 
     const previous = this.lastHr.get(label);
 
@@ -234,19 +281,30 @@ class AppleCollector {
       // Its duration is already known, so it must NOT stay pending — otherwise the
       // next reading credits it a second time via the gap rule below.
       this.lastHr.delete(label);
-      if (this.collect) {
-        this._add(hrBandMetric(hrBandFor(bpm)), dateKey, source, ownSpan / 1000, 'sum', start.ms);
-      }
+      if (this.collect) this._band(owner, bpm, ownSpan / 1000);
       return;
     }
 
-    this.lastHr.set(label, { ms: start.ms, bpm, dateKey, offsetMin: start.offsetMin });
+    this.lastHr.set(label, { ms: start.ms, bpm, owner });
     if (!this.collect || !previous) return;
+    // Only a gap between two readings of the SAME workout is time that was measured.
+    // Across a boundary it is not: the next reading might be an hour and a different
+    // sport later, and crediting the difference would invent the end of a session
+    // rather than report it. The last reading of a workout therefore contributes
+    // nothing, which at a few seconds' sampling costs a few seconds.
+    if (previous.owner !== owner) return;
     const gap = start.ms - previous.ms;
     // Out-of-order records would otherwise contribute negative time.
     if (gap <= 0) return;
-    this._add(hrBandMetric(hrBandFor(previous.bpm)), previous.dateKey, source,
-              Math.min(gap, HR_GAP_CAP_MS) / 1000, 'sum', previous.ms);
+    this._band(previous.owner, previous.bpm, Math.min(gap, HR_GAP_CAP_MS) / 1000);
+  }
+
+  _band(sessionId, bpm, seconds) {
+    if (!sessionId || !(seconds > 0)) return;
+    const bands = this.sessionBands.get(sessionId) || {};
+    const floor = hrBandFor(bpm);
+    bands[floor] = (bands[floor] || 0) + seconds;
+    this.sessionBands.set(sessionId, bands);
   }
 
   _startWorkout(attrs) {
@@ -299,6 +357,10 @@ class AppleCollector {
 
   // --- output ---------------------------------------------------------------------
   finish() {
+    for (const session of this.sessions) {
+      const bands = this.sessionBands.get(session.id);
+      if (bands) session.hrBands = bands;
+    }
     return {
       sessions: this.sessions,
       daily: this.buckets.toRecords(this.importBatch, this.importedAt),

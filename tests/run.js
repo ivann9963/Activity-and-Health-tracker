@@ -233,18 +233,12 @@ async function appleTests() {
     eq('sleep is attributed to the wake day', sleep[0].localDate, '2024-03-12');
     eq('only genuinely-asleep stages count', sleep[0].value, 420);
 
-    // Heart rate: 140 held 1 min and 150 held 1 min (both in the 140 band), 95 held
-    // 1 min while jogging easy, 165 held 1 min and 175 held 56 min capped to 5 (both
-    // in the 160 band). The final reading of the stream has no following sample, so
-    // it has no span — which is correct, since nothing in the file says how long it
-    // lasted.
-    eq('time in the 140 band', byMetric('hr_band_140')[0].value, 120);
-    eq('time in the 160 band, with the long gap capped', byMetric('hr_band_160')[0].value, 360);
-    eq('a band nobody reached is not stored', byMetric('hr_band_100').length, 0);
-    // An easy minute inside the workout is recorded rather than discarded: the screen
-    // leaves it out of the chart, but the number has to exist to be left out.
-    eq('a resting stretch inside a workout is still banded',
-       byMetric('hr_band_0')[0].value, 60);
+    // Banded heart rate is no longer a daily figure: it belongs to the workout it
+    // was recorded during. A pass with no workout windows knows of no workout, so it
+    // credits nothing — which is the honest answer, not a zero.
+    ok('bands are not stored against the day', !res.daily.some(d => /^hr_band_/.test(d.metric)));
+    ok('and without windows nothing is credited',
+       res.sessions.every(s => !s.hrBands));
 
     ok('an unmapped record type is reported but not stored',
        res.tally.types['HKQuantityTypeIdentifierEnvironmentalAudioExposure'].count === 1 &&
@@ -313,6 +307,34 @@ suite('session dedupe — the same run seen twice', () => {
   eq('a run and a swim are never the same event',
      counted(app.dedupeSessions([session({}),
        session({ activity: 'swimming', source: { device: 'Strava' } })], settings, {})).length, 2);
+});
+
+suite('session dedupe — the winner inherits the effort', () => {
+  // The importer credits banded heart rate to whichever copy of a workout owned the
+  // clock, which need not be the copy that wins here. Without this the effort of a
+  // duplicated session disappears the moment it is deduplicated — and a duplicated
+  // session is the normal case for someone running two devices.
+  const watch = session({ hrBands: { 140: 900, 160: 300 } });
+  const strava = session({ source: { device: 'Strava' },
+    start: Date.parse('2024-03-12T16:00:35Z'), end: Date.parse('2024-03-12T16:32:59Z'),
+    distanceM: 6180 });
+  const d = app.dedupeSessions([strava, watch], settings, {});
+  app.applySessionDecisions(d);
+  const kept = counted(d)[0];
+  eq('the surviving copy carries the bands', kept.hrBands, { 140: 900, 160: 300 });
+
+  // Two recordings of one hour are not two hours: the fuller set is taken, not a sum.
+  const a = session({ hrBands: { 140: 600 } });
+  const b = session({ source: { device: 'Strava' }, hrBands: { 140: 900 },
+    start: Date.parse('2024-03-12T16:00:35Z') });
+  const two = app.dedupeSessions([a, b], settings, {});
+  app.applySessionDecisions(two);
+  eq('the fuller recording wins, and they are never added up',
+     counted(two)[0].hrBands, { 140: 900 });
+
+  // Running it twice must not change anything, since dedupe re-runs on every import.
+  const again = app.dedupeSessions([a, b], settings, {});
+  eq('a second pass writes nothing back', app.applySessionDecisions(again).length, 0);
 });
 
 suite('session dedupe — tie-breaking and overrides', () => {
@@ -691,31 +713,46 @@ function fitbitParseTests() {
   });
 
   suite('Fitbit heart rate', () => {
+    // The workout the readings fall inside. Bands belong to a session now, so there
+    // has to be one — which is also how the real import runs: exercise files first.
+    const workout = () => ({
+      activity: 'running', rawActivity: 'Run',
+      start: Date.UTC(2026, 6, 4, 7, 0, 0), end: Date.UTC(2026, 6, 4, 7, 10, 0),
+      tzOffset: 0, source: { vendor: 'fitbit', app: 'Google Health', device: 'Fitbit' }
+    });
+
     const out = app.createFitbitCollector('b', 1);
+    out.addSession(workout());
+    const windows = app.windowsFromSessions(out.sessions);
     // Readings at 07:00:00, 07:00:30, 07:02:30 and then an hour later. Each reading
-    // is worth the gap to the next: 30s at 150, 120s at 165, and the 57-minute gap
-    // capped at five minutes at 175. The last reading has no successor.
+    // is worth the gap to the next reading OF THE SAME WORKOUT: 30s at 150 and 120s
+    // at 165. The 175 is the last one inside the run, and the next reading is an
+    // hour later with the band on a wrist doing nothing — so it is worth nothing.
+    // Crediting it the capped five minutes would be inventing the end of the run.
     app.parseFitbitHeartRate([
       { dateTime: '07/04/26 07:00:00', value: { bpm: 150, confidence: 2 } },
       { dateTime: '07/04/26 07:00:30', value: { bpm: 165, confidence: 3 } },
       { dateTime: '07/04/26 07:02:30', value: { bpm: 175, confidence: 3 } },
       { dateTime: '07/04/26 08:00:00', value: { bpm: 80, confidence: 2 } }
-    ], out);
+    ], out, windows);
     const res = out.finish();
-    const band = f => res.daily.find(d => d.metric === 'hr_band_' + f);
-    eq('the 140 band gets the first gap', band(140).value, 30);
-    eq('the 160 band gets the second and the capped one', band(160).value, 120 + 300);
-    eq('the final reading contributes nothing', band(0), undefined);
-    eq('and it is attributed to Fitbit', app.sourceLabel(band(140).source), 'Fitbit');
+    const bands = res.sessions[0].hrBands || {};
+    eq('the 140 band gets the first gap', bands[140], 30);
+    eq('the 160 band gets the second gap', bands[160], 120);
+    eq('the last reading of a workout is not credited a span', bands[160] < 120 + 300, true);
+    eq('the reading an hour later is outside the workout', bands[0], undefined);
+    ok('and nothing is written against the day',
+       !res.daily.some(d => /^hr_band_/.test(d.metric)));
 
     // A plain numeric value, as some export vintages write it.
     const plain = app.createFitbitCollector('b', 1);
+    plain.addSession(workout());
     app.parseFitbitHeartRate([
       { dateTime: '07/04/26 07:00:00', value: 150 },
       { dateTime: '07/04/26 07:01:00', value: 150 }
-    ], plain);
+    ], plain, app.windowsFromSessions(plain.sessions));
     eq('a bare numeric reading works too',
-       plain.finish().daily.find(d => d.metric === 'hr_band_140').value, 60);
+       plain.finish().sessions[0].hrBands[140], 60);
   });
 
   suite('Fitbit file classification, revisited', () => {
@@ -993,19 +1030,27 @@ async function heartRateSpanTests() {
       startDate="2026-03-01 10:04:00 +0000" endDate="2026-03-01 10:04:00 +0000" value="150"/>
     <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min"
       startDate="2026-03-01 10:05:00 +0000" endDate="2026-03-01 10:05:00 +0000" value="150"/>
+    <Workout workoutActivityType="HKWorkoutActivityTypeRunning" sourceName="Watch"
+      duration="6" durationUnit="min"
+      startDate="2026-03-01 10:00:00 +0000" endDate="2026-03-01 10:06:00 +0000"/>
     </HealthData>`;
   const bytes = new TextEncoder().encode(xml);
-  const stream = new ReadableStream({
+  // Read twice, as a real import does: once for the workouts, once for everything.
+  const makeStream = () => new ReadableStream({
     start(c) { c.enqueue(bytes); c.close(); }
   });
-  const res = await app.scanAppleExport(stream, { importBatch: 't' });
-  const band = res.daily.find(d => d.metric === 'hr_band_140');
+  const windows = await app.scanAppleWorkoutWindows(makeStream());
+  const res = await app.scanAppleExport(makeStream(), {
+    importBatch: 't', workoutWindows: windows
+  });
+  const banded = res.sessions.find(s => s.hrBands) || { hrBands: {} };
 
   suite('heart rate: an interval is counted once', () => {
     // 60s for the stated interval, plus 60s for the gap between the two instants.
     // The old behaviour also credited the 180s gap after the interval record,
     // inflating this to 300s.
-    eq('the stated interval and the instant gap, and nothing more', band.value, 120);
+    eq('the stated interval and the instant gap, and nothing more',
+       banded.hrBands[140], 120);
   });
 }
 
@@ -1020,18 +1065,23 @@ async function heartRateWindowTests() {
   const withWindows = await app.scanAppleExport(makeStream(), {
     importBatch: 'w', workoutWindows: windows
   });
-  const band = f => withWindows.daily.find(d => d.metric === 'hr_band_' + f);
+  // Summed across every workout, which is what the screen does before filtering.
+  const band = f => withWindows.sessions
+    .reduce((n, s) => n + ((s.hrBands || {})[f] || 0), 0);
 
   suite('heart rate is banded only during workouts', () => {
     ok('the first pass finds the workouts', windows.length >= 5, String(windows.length));
     ok('and they are sorted and non-overlapping',
-       windows.every((w, i) => i === 0 || w[0] > windows[i - 1][1]));
+       windows.every((w, i) => i === 0 || w[0] >= windows[i - 1][1]));
 
     // The fixture's readings sit inside the 18:00 run except the last, an hour later
     // while sitting down. Without windows that idle hour contributed a capped five
     // minutes to the 160 band; with them it contributes nothing.
-    eq('readings inside the workout still count', band(140).value, 120);
-    eq('the reading after it no longer credits an idle gap', band(160).value, 60);
+    eq('readings inside the workout still count', band(140), 120);
+    eq('the reading after it no longer credits an idle gap', band(160), 60);
+    // The whole point of moving them off the day: each figure names its workout.
+    eq('and they are attached to the workout they happened in',
+       withWindows.sessions.filter(s => s.hrBands).length, 1);
 
     // Everything that is not heart rate is unaffected.
     eq('steps are untouched',
@@ -1041,24 +1091,43 @@ async function heartRateWindowTests() {
 
   suite('workout windows', () => {
     const sessions = [
-      { start: 1000, end: 2000 },
-      { start: 1500, end: 3000 },   // overlaps the first
-      { start: 900000, end: 901000 }
+      { start: 1000, end: 2000, id: 'a' },
+      { start: 1500, end: 3000, id: 'b' },   // overlaps the first
+      { start: 900000, end: 901000, id: 'c' }
     ];
-    const merged = app.windowsFromSessions(sessions, 0);
-    eq('overlapping copies of a workout merge into one window', merged.length, 2);
-    eq('and the merged window spans both', merged[0], [1000, 3000]);
+    const windows = app.windowsFromSessions(sessions, 0);
 
-    ok('an instant inside is found', app.insideWindow(merged, 2500));
-    ok('one before is not', !app.insideWindow(merged, 500));
-    ok('one in the gap is not', !app.insideWindow(merged, 500000));
-    ok('one after is not', !app.insideWindow(merged, 1000000));
-    ok('the boundary counts', app.insideWindow(merged, 1000) && app.insideWindow(merged, 3000));
+    ok('every instant of both overlapping workouts is covered',
+       [1000, 1500, 1999, 2500, 3000].every(ms => app.insideWindow(windows, ms)));
+    ok('one before is not', !app.insideWindow(windows, 500));
+    ok('one in the gap is not', !app.insideWindow(windows, 500000));
+    ok('one after is not', !app.insideWindow(windows, 1000000));
     ok('nothing matches an empty list', !app.insideWindow([], 1500));
 
+    // The point of keeping the id: banded time has to be credited to a workout, and
+    // a merged interval cannot say which. The shorter workout owns the overlap —
+    // a half-hour run logged inside a two-hour walk is a run, not a walk.
+    eq('the shorter workout owns the stretch they share',
+       app.windowAt(windows, 1800)[2], 'a');
+    eq('and the longer one keeps the rest of its own time',
+       app.windowAt(windows, 2500)[2], 'b');
+    eq('a workout on its own is undivided', app.windowAt(windows, 900500)[2], 'c');
+    eq('windows stay sorted so the search holds',
+       windows.every((w, i) => i === 0 || w[0] >= windows[i - 1][1]), true);
+
     // A workout's heart rate starts before the watch is told the workout has begun.
-    const padded = app.windowsFromSessions([{ start: 100000, end: 200000 }], 60);
-    eq('windows are padded either side', padded[0], [40000, 260000]);
+    const padded = app.windowsFromSessions([{ start: 100000, end: 200000, id: 'x' }], 60);
+    eq('windows are padded either side', [padded[0][0], padded[0][1]], [40000, 260000]);
+
+    // A workout split in the middle by a shorter one must not come back as three
+    // separate intervals with the same owner on either side.
+    const split = app.windowsFromSessions([
+      { start: 0, end: 10000, id: 'long' },
+      { start: 4000, end: 5000, id: 'short' }
+    ], 0);
+    eq('an interrupted workout is three stretches, not more', split.length, 3);
+    eq('and the interruption is attributed to the shorter one',
+       split.map(w => w[2]), ['long', 'short', 'long']);
   });
 }
 
@@ -1138,6 +1207,32 @@ function insightsTests() {
     eq('but it is not counted as nothing happening either', days.ambientOnly, 1);
     eq('while counting it makes the day active',
        app.activeDays([dance], '2026-03-01', '2026-03-03', []).active, 1);
+  });
+
+  suite('heart-rate bands follow the same exclusions', () => {
+    // The inconsistency this closes: time by heart rate was a daily figure, so an
+    // activity set aside vanished from every card except that one, which went on
+    // reporting its minutes.
+    const dance = S({ activity: 'other', rawActivity: 'HKWorkoutActivityTypeCardioDance',
+                      durationSec: 3600, hrBands: { 120: 1800, 140: 600 } });
+    const run = S({ durationSec: 1800, hrBands: { 140: 900, 160: 300 } });
+    const all = app.hrBandTotals([dance, run]);
+    const at = (rows, floor) => rows.find(r => r.floor === floor).seconds;
+
+    eq('bands sum across workouts', at(all, 140), 1500);
+    eq('every band is reported, including the empty ones', all.length, 6);
+    eq('a band nobody reached is zero rather than missing', at(all, 180), 0);
+
+    const key = app.sessionKey(dance);
+    const kept = app.hrBandTotals([dance, run], { exclude: [key] });
+    eq('setting an activity aside takes its heart rate with it', at(kept, 140), 900);
+    eq('and its other bands too', at(kept, 120), 0);
+
+    // Dedupe already decided which copy of a workout is real; the bands must respect
+    // that, or two sources recording one run double its time above 140.
+    const loser = S({ durationSec: 1800, hrBands: { 140: 900 }, supersededBy: 'x' });
+    eq('a superseded copy contributes nothing',
+       at(app.hrBandTotals([run, loser]), 140), 900);
   });
 
   suite('where the time goes', () => {

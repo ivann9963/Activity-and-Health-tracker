@@ -41,11 +41,17 @@ function dedupeSessions(sessions, settings, overrides) {
       continue;
     }
     const winner = pickWinner(g.members, settings);
+    // Heart-rate bands hang off whichever copy the importer credited, which is not
+    // necessarily the copy that wins here — so the winner inherits the fullest set in
+    // the group, or a duplicated workout's effort disappears with the losing record.
+    // The richest set, never the sum: these are two recordings of one hour, not two.
+    const bands = richestBands(g.members);
     for (const m of g.members) {
       const computed = m.id === winner.id ? null : winner.id;
       decisions.push({
         record: m,
         supersededBy: applyOverride(overrides, m, computed),
+        hrBands: m.id === winner.id ? bands : undefined,
         groupId: g.id,
         reason: m.id === winner.id
           ? `kept: ${sourceLabel(m.source)} outranks the ` +
@@ -57,6 +63,23 @@ function dedupeSessions(sessions, settings, overrides) {
   return decisions;
 }
 
+function bandSeconds(bands) {
+  if (!bands) return 0;
+  let n = 0;
+  for (const k of Object.keys(bands)) n += bands[k] || 0;
+  return n;
+}
+
+// The member carrying the most banded time. Ties go to nothing in particular, since
+// equal totals over the same hour say the same thing.
+function richestBands(members) {
+  let best = null;
+  for (const m of members) {
+    if (bandSeconds(m.hrBands) > bandSeconds(best)) best = m.hrBands;
+  }
+  return best;
+}
+
 // Apply decisions onto the records themselves, returning only those that changed so
 // the caller can write back a minimal set.
 function applySessionDecisions(decisions) {
@@ -64,10 +87,13 @@ function applySessionDecisions(decisions) {
   for (const d of decisions) {
     const next = d.supersededBy || null;
     const nextDedupe = d.groupId ? { groupId: d.groupId, reason: d.reason } : null;
+    const nextBands = d.hrBands === undefined ? d.record.hrBands : (d.hrBands || null);
     if (d.record.supersededBy === next &&
-        JSON.stringify(d.record.dedupe) === JSON.stringify(nextDedupe)) continue;
+        JSON.stringify(d.record.dedupe) === JSON.stringify(nextDedupe) &&
+        JSON.stringify(d.record.hrBands) === JSON.stringify(nextBands)) continue;
     d.record.supersededBy = next;
     d.record.dedupe = nextDedupe;
+    d.record.hrBands = nextBands;
     changed.push(d.record);
   }
   return changed;

@@ -181,18 +181,22 @@ function parseFitbitHeartRate(data, out, workoutWindows) {
     const when = parseFitbitDate(row.dateTime || row.date);
     if (!when) continue;
     // Only during a workout — the rest is sitting still, and it drowns the bands.
-    if (workoutWindows && !insideWindow(workoutWindows, when.ms)) { previous = null; continue; }
+    // The window also names the workout, so the time can be credited to it.
+    const window = workoutWindows ? windowAt(workoutWindows, when.ms) : null;
+    const owner = window ? window[2] : null;
+    if (workoutWindows && !window) { previous = null; continue; }
     const bpm = Number(row.value && typeof row.value === 'object' ? row.value.bpm : row.value);
     if (!isFinite(bpm) || bpm <= 0) { previous = null; continue; }
 
-    if (previous) {
+    // Only the gap between two readings of the same workout is measured time; across
+    // a boundary the next reading may be hours and a different sport away.
+    if (previous && previous.owner === owner) {
       const gap = when.ms - previous.ms;
       if (gap > 0) {
-        out.addDaily(hrBandMetric(hrBandFor(previous.bpm)), previous.localDate,
-                     Math.min(gap, FITBIT_HR_GAP_CAP_MS) / 1000, 'sum', previous.ms);
+        out.band(previous.owner, previous.bpm, Math.min(gap, FITBIT_HR_GAP_CAP_MS) / 1000);
       }
     }
-    previous = { ms: when.ms, bpm, localDate: when.localDate };
+    previous = { ms: when.ms, bpm, owner };
   }
 }
 
