@@ -903,3 +903,78 @@ a.metric-tile:active { transform: scale(.99); }
   background: linear-gradient(90deg, transparent,
               var(--brand-solid) 40%, var(--brand-400) 60%, transparent);
 }
+
+/* --- daily targets ----------------------------------------------------------------
+   One row per target: what it is, where the bar sits, how many days cleared it, and
+   the run. The bar under the row is the count as a proportion, so a glance down the
+   card ranks them without reading a single number. */
+.target-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "icon name  count"
+    "icon rule  rule"
+    "bar  bar   bar"
+    "note note  note";
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-secondary);
+}
+.target-row:last-of-type { border-bottom: 0; }
+.target-icon { grid-area: icon; align-self: start;
+               display: inline-flex; align-items: center; justify-content: center;
+               width: 28px; height: 28px; border-radius: var(--radius-md);
+               background: var(--bg-secondary); color: var(--text-tertiary); }
+.target-name { grid-area: name; font-size: 14px; line-height: 20px; font-weight: 600; }
+.target-rule { grid-area: rule; font-size: 12px; line-height: 18px; color: var(--text-tertiary); }
+.target-count { grid-area: count; font-size: 14px; line-height: 20px;
+                color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.target-count strong { font-size: 20px; color: var(--text-primary); font-weight: 600; }
+.target-track { grid-area: bar; height: 6px; margin-top: 10px;
+                border-radius: var(--radius-full); background: var(--brand-subtle-bg); }
+.target-fill { height: 100%; border-radius: var(--radius-full);
+               background: var(--brand-solid); min-width: 2px;
+               transition: width 620ms cubic-bezier(.2,.7,.3,1); }
+.target-fill.is-zero { background: var(--bg-quaternary); }
+.target-note { grid-area: note; margin-top: 6px;
+               font-size: 12px; line-height: 18px; color: var(--text-tertiary); }
+
+.target-field .target-input-wrap { display: flex; align-items: center; gap: 6px; }
+.target-input {
+  width: 92px; padding: 8px 10px; text-align: right;
+  background: var(--bg-primary); color: var(--text-primary);
+  border: 1px solid var(--border-primary); border-radius: var(--radius-md);
+  font-family: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
+  box-shadow: 0px 1px 2px rgba(10,13,18,.05);
+}
+
+/* The training streak, stated rather than tallied: "12" alone answers nothing. */
+.streak-line {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  margin: 0 0 14px; font-size: 14px; line-height: 20px; color: var(--text-secondary);
+}
+.streak-line .icon { color: var(--brand-fg); align-self: center; }
+.streak-line strong { color: var(--text-primary); font-weight: 600;
+                      font-variant-numeric: tabular-nums; }
+
+/* --- records -----------------------------------------------------------------------
+   Grouped by sport, because "longest" means a duration for the gym and a distance
+   for a swim, and a single sorted list would be comparing unlike things. */
+.record-group { padding: 14px 0; border-bottom: 1px solid var(--border-secondary); }
+.record-group:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.record-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.record-icon { display: inline-flex; align-items: center; justify-content: center;
+               width: 28px; height: 28px; flex: none; border-radius: var(--radius-md);
+               background: var(--brand-subtle-bg); color: var(--brand-fg); }
+.record-sport { font-size: 14px; line-height: 20px; font-weight: 600; }
+.record-list { display: grid; gap: 8px; }
+.record-item { display: grid; grid-template-columns: 5.5rem 1fr auto;
+               align-items: baseline; gap: 10px; }
+.record-kind { font-size: 12px; line-height: 18px; color: var(--text-quaternary);
+               text-transform: uppercase; letter-spacing: 0.04em; }
+.record-value { font-size: 18px; line-height: 24px; font-weight: 600;
+                font-variant-numeric: tabular-nums slashed-zero;
+                font-feature-settings: var(--numerals); letter-spacing: -0.01em; }
+.record-when { font-size: 12px; line-height: 18px; color: var(--text-tertiary);
+               font-variant-numeric: tabular-nums; }

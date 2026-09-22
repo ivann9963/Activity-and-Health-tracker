@@ -25,8 +25,13 @@ function renderSettings(host) {
   }
 
   return Promise.all([loadSettings(), dbGetAll('sessions'), dbCount('daily'),
-                      metricsWithData(), googleStatus()])
-    .then(([settings, allSessions, daily, withData, google]) => {
+                      metricsWithData(), googleStatus(), loadGoals()])
+    .then(([settings, allSessions, daily, withData, google, storedGoals]) => {
+      // Day targets share the goals store, keyed by period. Pull out just those.
+      const dayTargets = {};
+      for (const g of Object.values(storedGoals)) {
+        if (g.period === DAY_PERIOD) dayTargets[g.metricId] = g;
+      }
       const sessions = allSessions.length;
       // Offer what this person actually does, not a fixed menu. An activity the app
       // could not categorise is exactly the one they are most likely to want switched
@@ -83,6 +88,28 @@ function renderSettings(host) {
                 ${has ? '' : '<span class="pill">no data</span>'}</span>
               <input type="checkbox" class="metric-toggle" data-metric="${id}"
                      ${hidden ? '' : 'checked'}>
+            </label>`;
+          }).join('')}
+        </div>
+
+        <div class="card">
+          <h2>Daily targets</h2>
+          <p class="subtle">A standard a single day either meets or misses, as opposed
+             to a total for the whole period. Insights then counts the days that
+             cleared it and the longest run of them. Leave a box empty for no target.</p>
+          ${targetableMetrics().map(id => {
+            const saved = dayTargets[id];
+            const cmp = (saved && saved.comparison) || targetComparison(id);
+            const shown = saved ? Number((saved.target / targetScale(id)).toFixed(2)) : '';
+            return `<label class="field target-field">
+              <span>${iconOrText(METRICS[id].icon, 16)} ${escHtml(METRICS[id].label)}
+                <span class="pill">${cmp === 'atMost' ? 'at most' : 'at least'}</span></span>
+              <span class="target-input-wrap">
+                <input type="number" class="target-input" data-target="${id}"
+                       inputmode="decimal" step="any" min="0"
+                       value="${shown}" aria-label="Daily target for ${escHtml(METRICS[id].label)}">
+                <span class="goal-unit">${escHtml(targetUnitLabel(id))}</span>
+              </span>
             </label>`;
           }).join('')}
         </div>
@@ -220,6 +247,25 @@ function renderSettings(host) {
             settings.hiddenMetrics = next;
             showToast(input.checked ? 'Tile shown' : 'Tile hidden', 'success');
           });
+        };
+      });
+
+      host.querySelectorAll('.target-input').forEach(input => {
+        // Committed on change rather than on every keystroke: a half-typed "1" from
+        // "12" is a target nobody set, and saving it would flash a wrong count.
+        input.onchange = () => {
+          const id = input.dataset.target;
+          const typed = input.value.trim();
+          if (typed === '') {
+            return clearGoal(id, DAY_PERIOD).then(() => showToast('Target cleared', 'success'));
+          }
+          const value = Number(typed);
+          if (!isFinite(value) || value <= 0) {
+            showToast('That is not a target', 'error');
+            return;
+          }
+          return setDayTarget(id, value * targetScale(id))
+            .then(() => showToast('Target set', 'success'));
         };
       });
 

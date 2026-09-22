@@ -1131,6 +1131,114 @@ async function heartRateWindowTests() {
   });
 }
 
+// --- daily targets, streaks and records ---------------------------------------------
+function targetTests() {
+  const S = (over) => ({ activity: 'running', localDate: '2026-03-02',
+                         durationSec: 1800, distanceM: 5000, avgHr: 150,
+                         start: Date.parse('2026-03-02T07:00:00Z'), ...over });
+
+  suite('a daily target counts days, not totals', () => {
+    // 186 hours of sleep across a month says nothing about whether the nights were
+    // any good. Seven of them over 7h does.
+    const byDay = { '2026-03-01': 400, '2026-03-02': 460, '2026-03-03': 380,
+                    '2026-03-04': 500, '2026-03-05': 470 };
+    const r = app.targetResult(byDay, '2026-03-01', '2026-03-05', 420, 'atLeast', '2026-03-10');
+    eq('days that cleared the bar are counted', r.met, 3);
+    eq('and days that did not are not', r.total - r.met, 2);
+    eq('the best run of consecutive days is found', r.longest, 2);
+    eq('and it is dated', [r.longestStart, r.longestEnd], ['2026-03-04', '2026-03-05']);
+    eq('the last day it was met is reported', r.lastMet, '2026-03-05');
+
+    // A day with no reading is not a day you met the target, in either direction.
+    const gappy = app.targetResult({ '2026-03-01': 460 }, '2026-03-01', '2026-03-05',
+                                   420, 'atLeast', '2026-03-10');
+    eq('a missing day never counts as met', gappy.met, 1);
+    eq('and the honest denominator is offered too', Math.round(gappy.pctOfRecorded), 100);
+    eq('alongside the calendar one', Math.round(gappy.pct), 20);
+  });
+
+  suite('lower is better for some targets', () => {
+    eq('resting heart rate is a ceiling', app.targetComparison('resting_hr'), 'atMost');
+    eq('weight is too', app.targetComparison('weight'), 'atMost');
+    eq('everything else is a floor', app.targetComparison('steps'), 'atLeast');
+
+    const hr = { '2026-03-01': 58, '2026-03-02': 61, '2026-03-03': 55 };
+    const r = app.targetResult(hr, '2026-03-01', '2026-03-03', 60, 'atMost', '2026-03-10');
+    eq('a ceiling counts the days below it', r.met, 2);
+    ok('and a floor would have counted the opposite days',
+       app.targetResult(hr, '2026-03-01', '2026-03-03', 60, 'atLeast', '2026-03-10').met === 1);
+  });
+
+  suite("today never breaks a streak", () => {
+    // The regression this exists for: opening the app at 8am and being told a
+    // 40-day streak ended, because nothing was recorded yet on a day that has
+    // barely started.
+    const byDay = { '2026-03-01': 500, '2026-03-02': 500, '2026-03-03': 500 };
+    const r = app.targetResult(byDay, '2026-03-01', '2026-03-04', 420, 'atLeast', '2026-03-04');
+    eq('a run reaching yesterday is still current', r.current, 3);
+    eq('and today is not counted as met', r.met, 3);
+
+    const stale = app.targetResult(byDay, '2026-03-01', '2026-03-08', 420, 'atLeast', '2026-03-08');
+    eq('but a run that ended days ago is not current', stale.current, 0);
+    eq('though it is still the longest', stale.longest, 3);
+  });
+
+  suite('the streak that matters is any workout at all', () => {
+    // Per-metric streaks say "days running in a row", which for someone who runs,
+    // lifts and plays tennis is always 1. This is the one people mean.
+    const sessions = [
+      S({ localDate: '2026-03-01' }),
+      S({ localDate: '2026-03-02', activity: 'strength' }),
+      S({ localDate: '2026-03-03', activity: 'racket' }),
+      S({ localDate: '2026-03-05' })
+    ];
+    const r = app.workoutStreaks(sessions, '2026-03-01', '2026-03-05', [], '2026-03-12');
+    eq('three different sports on three days is a streak of three', r.longest, 3);
+    eq('and the trained days are counted', r.trainedDays, 4);
+
+    // Set aside an activity and it stops holding the streak together.
+    const walked = sessions.concat([S({ localDate: '2026-03-04', activity: 'walking' })]);
+    eq('a set-aside activity does not extend a streak',
+       app.workoutStreaks(walked, '2026-03-01', '2026-03-05', ['walking'], '2026-03-12').longest, 3);
+    eq('but counting it joins the two runs into one',
+       app.workoutStreaks(walked, '2026-03-01', '2026-03-05', [], '2026-03-12').longest, 5);
+
+    // A superseded duplicate must not create a day of its own.
+    const dupe = sessions.concat([S({ localDate: '2026-03-09', supersededBy: 'x' })]);
+    eq('a deduplicated copy is not a day trained',
+       app.workoutStreaks(dupe, '2026-03-01', '2026-03-09', [], '2026-03-12').trainedDays, 4);
+  });
+
+  suite('records are single efforts, not good days', () => {
+    // Three 5k runs in a day is a good day. It is not a 15k.
+    const recs = app.sessionRecords([
+      S({ durationSec: 1800, distanceM: 5000 }),
+      S({ durationSec: 5400, distanceM: 15000, localDate: '2026-04-01' }),
+      S({ durationSec: 1500, distanceM: 5000, localDate: '2026-05-01' }),
+      S({ activity: 'strength', durationSec: 4200, distanceM: null, localDate: '2026-04-02' })
+    ]);
+    const running = recs.find(g => g.label === 'Running');
+    eq('the longest run is the longest single session', running.records.longest.value, 5400);
+    eq('the furthest is its own record', running.records.furthest.value, 15000);
+    // 1500s over 5000m is 5:00/km; 1800s over 5000m is 6:00/km.
+    eq('and the fastest is the lowest pace, not the highest',
+       Math.round(running.records.fastest.value), 300);
+    eq('each activity gets its own group', recs.length, 2);
+
+    const gym = recs.find(g => g.label === 'Gym');
+    ok('an activity with no distance still has a longest', gym.records.longest.value === 4200);
+    ok('and no furthest', !gym.records.furthest);
+
+    eq('a record formats like the totals do',
+       app.formatRecord(running.records.furthest), '15.0 km');
+    ok('and pace formats as pace', /\/km/.test(app.formatRecord(running.records.fastest)));
+
+    ok('a set-aside activity holds no records',
+       !app.sessionRecords([S({ activity: 'walking', durationSec: 9000 })],
+                           { exclude: ['walking'] }).length);
+  });
+}
+
 // --- insights ---------------------------------------------------------------------
 function insightsTests() {
   const S = (over) => ({ activity: 'running', localDate: '2026-03-02',
@@ -1379,6 +1487,7 @@ function insightsTests() {
     motivationTests();
     chartTests();
     insightsTests();
+    targetTests();
     await heartRateSpanTests();
     await heartRateWindowTests();
     await zipTests();

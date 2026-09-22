@@ -87,10 +87,10 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
   return `
     <div class="year-nav">
       <button class="icon-btn" id="year-prev" aria-label="Previous year"
-              ${year <= firstYear ? 'disabled' : ''}>‹</button>
+              ${year <= firstYear ? 'disabled' : ''}>${icon('chevronLeft', 20)}</button>
       <h1 class="year-title">${year}</h1>
       <button class="icon-btn" id="year-next" aria-label="Next year"
-              ${year >= lastYear ? 'disabled' : ''}>›</button>
+              ${year >= lastYear ? 'disabled' : ''}>${icon('chevronRight', 20)}</button>
     </div>
 
     <div class="card hero-card">

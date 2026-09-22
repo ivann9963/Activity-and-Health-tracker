@@ -41,10 +41,10 @@ function renderDashboard(host) {
           </div>
 
           <div class="period-nav">
-            <button class="icon-btn" id="prev-period" aria-label="Previous ${_period}">‹</button>
+            <button class="icon-btn" id="prev-period" aria-label="Previous ${_period}">${icon('chevronLeft', 20)}</button>
             <h1 class="period-label">${escHtml(periodLabel(now, _period, firstDay))}</h1>
             <button class="icon-btn" id="next-period" aria-label="Next ${_period}"
-                    ${isCurrentPeriod(now, firstDay) ? 'disabled' : ''}>›</button>
+                    ${isCurrentPeriod(now, firstDay) ? 'disabled' : ''}>${icon('chevronRight', 20)}</button>
           </div>
 
           <div class="metric-grid">

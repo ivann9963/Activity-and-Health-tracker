@@ -119,6 +119,18 @@ function setGoal(metricId, period, target, source) {
   });
 }
 
+// A daily target: the same record shape, with the comparison direction recorded so
+// a stored target keeps its meaning even if the default for that metric ever changes.
+function setDayTarget(metricId, threshold) {
+  return dbPut('goals', {
+    id: goalId(metricId, DAY_PERIOD),
+    metricId, period: DAY_PERIOD, target: threshold,
+    comparison: targetComparison(metricId),
+    source: 'manual',
+    setAt: Date.now()
+  });
+}
+
 function clearGoal(metricId, period) {
   return dbDelete('goals', goalId(metricId, period));
 }

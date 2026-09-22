@@ -30,7 +30,8 @@ const FILES = [
   'js/streaks.js',
   'js/goals.js',
   'js/charts.js',
-  'js/insights.js'
+  'js/insights.js',
+  'js/targets.js'
 ];
 
 function loadApp() {
@@ -90,6 +91,8 @@ function loadApp() {
       niceTarget, deriveTarget, goalProgress,
       timeByActivity, avgHrByActivity, sessionPace, formatPace, paceProgression,
       bestPaces, activeDays, sessionKey, isExcluded, activityGroupsPresent, hrBandTotals,
+      targetComparison, meetsTarget, targetResult, workoutStreaks, sessionRecords,
+      formatRecord, DAY_PERIOD,
       DEFAULT_SETTINGS
     };`, sandbox, { filename: 'app-bundle.js' });
 

@@ -40,6 +40,10 @@ function stagger(nodes, step, max) {
 // flag with no value for the same reason: one source of truth for what it says.
 function countUp(node) {
   if (motionOff()) return;
+  // Counting rewrites textContent, which would delete any child elements. A caller
+  // that marks a wrapper containing markup gets left alone rather than silently
+  // stripped — that already cost a bolded figure its <strong>.
+  if (node.firstElementChild) return;
   const finalText = node.textContent;
   const match = finalText.match(/[\d][\d,]*(\.\d+)?/);
   if (!match) return;

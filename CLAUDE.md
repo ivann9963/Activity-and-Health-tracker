@@ -150,6 +150,42 @@ no value for the same reason. While a counter runs the element carries
 `data-counting`, which is how tests and screenshots wait for the settled figure
 instead of sampling a frame mid-count.
 
+**Never put `data-count` on an element that wraps markup.** Counting rewrites
+`textContent`, which deletes child elements — it already cost a bolded figure its
+`<strong>`. `countUp` now refuses an element with children, and the smoke test fails
+if any marked element has any.
+
+## Goals vs targets
+
+Two different commitments, and conflating them produces a number that answers neither.
+
+- A **goal** (`js/goals.js`) is a total to reach by the end of a period: 100km this
+  month. Progress is a fraction of a sum.
+- A **target** (`js/targets.js`) is a standard one day either meets or misses: seven
+  hours of sleep, an hour of training. The answer is a count of days and the longest
+  run of them. "Slept 7h on 21 of 30 nights, best run 9" is a different fact from
+  "slept 186 hours", and the second cannot be derived from the first.
+
+Targets share the `goals` store, keyed with period `'day'`, so they are backed up and
+restored with everything else. `goalsForPeriod` reads an explicit period, so day
+targets never leak into period goals.
+
+Rules that are easy to get wrong:
+
+- **A day with no reading never counts as met**, in either direction. For a ceiling
+  like resting heart rate, silence is not success.
+- **Lower is better for `resting_hr` and `weight`** (`TARGET_LOWER_IS_BETTER`), and a
+  stored target records its own comparison so it keeps its meaning if the default
+  ever changes.
+- **Today never breaks a streak** — same rule as `streaks.js`, and for the same
+  reason: the day is not over.
+- `workoutStreaks` is days with *any* counted workout, which is what people mean by a
+  streak. `dayStreaks` in `streaks.js` is per-metric and reads 1 for anyone who
+  cross-trains. Set-aside activities are excluded from both.
+- **A record is a single session, not a day.** `bestDay` sums a day; three short runs
+  is a good day, not a long run. Records group by activity because "longest" is a
+  duration for the gym and a distance for a swim.
+
 ## Charts
 
 Single series throughout, so no legends — the heading names what is plotted. Thin

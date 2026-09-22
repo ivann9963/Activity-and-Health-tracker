@@ -30,20 +30,47 @@ function renderInsights(host) {
     const anchor = _insightAnchor || todayLocal();
     const range = periodBounds(anchor, _insightPeriod, firstDay);
 
-    return Promise.all([
-      dbRange('sessions', 'byDate', range.from, range.to),
-      // Pace deserves a longer view than one period: a trend over three months is a
-      // trend, a trend over one week is noise.
-      dbRange('sessions', 'byDate', addDays(range.to, -730), range.to)
-    ]).then(([sessions, paceSessions]) => {
-      host.innerHTML = insightsHtml(sessions, paceSessions, range, settings);
-      drawInsightCharts(paceSessions);
-      wireInsights(firstDay);
+    return loadGoals().then(stored => {
+      // Day targets share the goals store; pull out the ones for this period kind so
+      // the rollup only fetches metrics somebody actually set a standard for.
+      const targets = Object.values(stored)
+        .filter(g => g.period === DAY_PERIOD && g.target != null)
+        .sort((a, b) => metricIds().indexOf(a.metricId) - metricIds().indexOf(b.metricId));
+
+      return Promise.all([
+        dbRange('sessions', 'byDate', range.from, range.to),
+        // Pace deserves a longer view than one period: a trend over three months is a
+        // trend, a trend over one week is noise.
+        dbRange('sessions', 'byDate', addDays(range.to, -730), range.to),
+        targets.length
+          ? rollupAllMetrics(range.from, range.to, targets.map(t => t.metricId))
+          : Promise.resolve({}),
+        // Records are all-time by definition, so they are the one thing here that
+        // does not follow the period switcher.
+        dbGetAll('sessions')
+      ]).then(([sessions, paceSessions, targetRollups, allSessions]) => {
+        const targetRows = targets.map(t => ({
+          metricId: t.metricId,
+          threshold: t.target,
+          comparison: t.comparison || targetComparison(t.metricId),
+          result: targetResult(targetRollups[t.metricId] ? targetRollups[t.metricId].byDay : {},
+                               range.from, range.to, t.target,
+                               t.comparison || targetComparison(t.metricId))
+        }));
+        const streak = workoutStreaks(allSessions, bounds.from, bounds.to || todayLocal(),
+                                      settings.notWorkouts || []);
+        const records = sessionRecords(allSessions, { exclude: settings.notWorkouts || [] });
+
+        host.innerHTML = insightsHtml(sessions, paceSessions, range, settings,
+                                      { targetRows, streak, records });
+        drawInsightCharts(paceSessions);
+        wireInsights(firstDay);
+      });
     });
   });
 }
 
-function insightsHtml(sessions, paceSessions, range, settings) {
+function insightsHtml(sessions, paceSessions, range, settings, extra) {
   const notWorkouts = settings.notWorkouts || [];
   const share = timeByActivity(sessions, { exclude: notWorkouts });
   const days = activeDays(sessions, range.from, range.to, notWorkouts);
@@ -63,17 +90,19 @@ function insightsHtml(sessions, paceSessions, range, settings) {
     </div>
 
     <div class="period-nav">
-      <button class="icon-btn" id="insight-prev" aria-label="Previous ${_insightPeriod}">‹</button>
+      <button class="icon-btn" id="insight-prev" aria-label="Previous ${_insightPeriod}">${icon('chevronLeft', 20)}</button>
       <h1 class="period-label">${escHtml(periodLabel(range, _insightPeriod, settings.firstDayOfWeek))}</h1>
       <button class="icon-btn" id="insight-next" aria-label="Next ${_insightPeriod}"
-              ${isCurrentPeriod(range, settings.firstDayOfWeek) ? 'disabled' : ''}>›</button>
+              ${isCurrentPeriod(range, settings.firstDayOfWeek) ? 'disabled' : ''}>${icon('chevronRight', 20)}</button>
     </div>
 
+    ${targetsCardHtml(extra.targetRows)}
     ${shareCardHtml(share, totalSeconds, hidden)}
-    ${activeDaysCardHtml(days)}
+    ${activeDaysCardHtml(days, extra.streak)}
     ${hrBandCardHtml(bands)}
     ${hrByActivityCardHtml(hr)}
-    ${notWorkouts.indexOf('running') === -1 ? paceCardHtml(paceSessions) : ''}`;
+    ${notWorkouts.indexOf('running') === -1 ? paceCardHtml(paceSessions) : ''}
+    ${recordsCardHtml(extra.records)}`;
 }
 
 function shareCardHtml(share, totalSeconds, hidden) {
@@ -141,9 +170,10 @@ function unlabelledDetailHtml(groups) {
   </details>`;
 }
 
-function activeDaysCardHtml(d) {
+function activeDaysCardHtml(d, streak) {
   return `<div class="card">
     <h2>Active days</h2>
+    ${streak ? streakLineHtml(streak) : ''}
     <div class="stat-row">
       ${statTile('Active', String(d.active), `${Math.round(d.pct)}% of ${d.total} days`)}
       ${statTile('Not counted', String(d.ambientOnly), 'set in Settings')}

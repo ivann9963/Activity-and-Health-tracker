@@ -127,6 +127,11 @@ try {
   const overshot = midCount.filter((t, i) => num(t) > num(settledCount[i]) + 0.001);
   check('a counting figure never exceeds the value it is counting to',
     overshot.length === 0, `${JSON.stringify(overshot)} vs ${JSON.stringify(settledCount)}`);
+  // Counting rewrites textContent, so marking an element that wraps markup used to
+  // delete the markup. Nothing with children may be counted.
+  const markupSurvived = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-count]')].every(n => !n.firstElementChild));
+  check('a counted element never wraps markup that counting would delete', markupSurvived);
   check('and the units survive the count',
     midCount.every((t, i) => t.replace(/[\d.,]/g, '') === settledCount[i].replace(/[\d.,]/g, '')),
     JSON.stringify(midCount));
