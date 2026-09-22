@@ -24,9 +24,22 @@ function renderSettings(host) {
     showToast(msg.text, msg.kind);
   }
 
-  return Promise.all([loadSettings(), dbCount('sessions'), dbCount('daily'),
+  return Promise.all([loadSettings(), dbGetAll('sessions'), dbCount('daily'),
                       metricsWithData(), googleStatus()])
-    .then(([settings, sessions, daily, withData, google]) => {
+    .then(([settings, allSessions, daily, withData, google]) => {
+      const sessions = allSessions.length;
+      // Offer what this person actually does, not a fixed menu. An activity the app
+      // could not categorise is exactly the one they are most likely to want switched
+      // off, and it is absent from ACTIVITIES by definition.
+      const groups = activityGroupsPresent(allSessions);
+      const known = new Set(groups.map(g => g.key));
+      // 'other' is a placeholder, never a thing anyone does: a session that lands
+      // there is listed under its own name, or under "Uncategorised". Offering it as a
+      // tick box would be offering to hide nothing.
+      const rest = Object.keys(ACTIVITIES)
+        .filter(id => id !== 'other' && !known.has(id))
+        .map(id => ({ key: id, label: ACTIVITIES[id].label, icon: ACTIVITIES[id].icon,
+                      seconds: 0, sessions: 0 }));
       const sources = Object.entries(settings.sourcePriority).sort((a, b) => b[1] - a[1]);
       host.innerHTML = `
         <div class="view-head"><h1>Settings</h1></div>
@@ -70,14 +83,16 @@ function renderSettings(host) {
         <div class="card">
           <h2>What counts as a workout</h2>
           <p class="subtle">Unticked activities still appear in your totals, but are
-             left out of active days and of where your time went. Walking is unticked
-             by default because a phone logs the walk to the kitchen — but if your
-             walking is training, tick it.</p>
-          ${Object.keys(ACTIVITIES).map(id => {
-            const off = (settings.notWorkouts || []).indexOf(id) !== -1;
+             left out of active days and of where your time went — you can untick the
+             same thing straight from a tile on the Insights screen. Walking is unticked by default because a phone logs the walk to the
+             kitchen — but if your walking is training, tick it.</p>
+          ${groups.concat(rest).map(g => {
+            const off = (settings.notWorkouts || []).indexOf(g.key) !== -1;
             return `<label class="field toggle-field">
-              <span>${ACTIVITIES[id].icon} ${escHtml(ACTIVITIES[id].label)}</span>
-              <input type="checkbox" class="workout-toggle" data-activity="${id}"
+              <span>${g.icon} ${escHtml(g.label)}
+                ${g.sessions ? `<span class="pill">${formatMetric('time_gym', g.seconds)}</span>`
+                             : '<span class="pill">no data</span>'}</span>
+              <input type="checkbox" class="workout-toggle" data-activity="${escHtml(g.key)}"
                      ${off ? '' : 'checked'}>
             </label>`;
           }).join('')}

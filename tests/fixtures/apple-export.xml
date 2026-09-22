@@ -42,6 +42,9 @@
       The 18:04 -> 19:00 gap is 56 minutes and must be capped, not counted. -->
  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:00:00 +0200" startDate="2024-03-12 18:00:00 +0200" endDate="2024-03-12 18:00:00 +0200" value="140"/>
  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:01:00 +0200" startDate="2024-03-12 18:01:00 +0200" endDate="2024-03-12 18:01:00 +0200" value="150"/>
+ <!-- A minute of easy jogging inside the workout: real training has resting stretches,
+      and they must be accounted for without being charted alongside the hard work. -->
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:02:00 +0200" startDate="2024-03-12 18:02:00 +0200" endDate="2024-03-12 18:02:00 +0200" value="95"/>
  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:03:00 +0200" startDate="2024-03-12 18:03:00 +0200" endDate="2024-03-12 18:03:00 +0200" value="165"/>
  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 18:04:00 +0200" startDate="2024-03-12 18:04:00 +0200" endDate="2024-03-12 18:04:00 +0200" value="175"/>
  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Ivan&apos;s Apple Watch" unit="count/min" creationDate="2024-03-12 19:00:00 +0200" startDate="2024-03-12 19:00:00 +0200" endDate="2024-03-12 19:00:00 +0200" value="90"/>

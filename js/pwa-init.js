@@ -16,14 +16,33 @@ function checkForStaleCopy() {
     .then(status => {
       if (!status || !status.build || status.build === 'unknown') return;
       if (status.build === APP.build) return;
+
+      // A stale copy is not something to offer a choice about: the person is looking
+      // at an app that no longer exists, and every question they ask of it has a
+      // wrong answer. So fetch the new worker and swap to it.
+      //
+      // Once per session, guarded — if the new version somehow still reports as old,
+      // an unguarded reload is an infinite loop.
+      const key = 'ledger-refreshed-for-' + status.build;
+      let alreadyTried = false;
+      try { alreadyTried = sessionStorage.getItem(key) === '1'; } catch (err) {}
+
+      if (!alreadyTried) {
+        try { sessionStorage.setItem(key, '1'); } catch (err) {}
+        showToast(`Updating to ${status.build}…`, 'info');
+        return refreshToLatest();
+      }
+
+      // The automatic attempt did not take. Say so rather than silently looping, and
+      // leave a manual way out.
       const host = el('toast-host');
       if (!host) return;
       const node = document.createElement('div');
       node.className = 'toast toast-update';
       node.innerHTML = `<span>Version ${escHtml(status.build)} is deployed — you are
-        seeing ${escHtml(APP.build)}</span>
-        <button class="btn btn-primary btn-small" type="button">Reload</button>`;
-      node.querySelector('button').onclick = () => location.reload(true);
+        still seeing ${escHtml(APP.build)}</span>
+        <button class="btn btn-primary btn-small" type="button">Force reload</button>`;
+      node.querySelector('button').onclick = () => refreshToLatest();
       host.appendChild(node);
     })
     .catch(() => {}); // offline, or no Worker — neither is worth reporting
@@ -60,6 +79,23 @@ function initPWA() {
     reloading = true;
     location.reload();
   });
+}
+
+// Drop every cache this app owns and reload. The service worker serves assets from
+// cache first, so an ordinary reload — even a hard one — can still hand back the old
+// files; only clearing the caches is certain.
+function refreshToLatest() {
+  const clearCaches = ('caches' in self)
+    ? caches.keys().then(keys => Promise.all(
+        keys.filter(k => k.startsWith('activity-ledger-')).map(k => caches.delete(k))))
+    : Promise.resolve();
+
+  return clearCaches
+    .then(() => (navigator.serviceWorker
+      ? navigator.serviceWorker.getRegistration().then(reg => reg && reg.update())
+      : null))
+    .catch(() => {})
+    .then(() => { location.reload(); });
 }
 
 function offerUpdate(worker) {

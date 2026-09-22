@@ -89,7 +89,7 @@ function loadApp() {
       dayStreaks, weekStreaks, bestDay, bestPeriod, activeThreshold,
       niceTarget, deriveTarget, goalProgress,
       timeByActivity, avgHrByActivity, sessionPace, formatPace, paceProgression,
-      bestPaces, activeDays,
+      bestPaces, activeDays, sessionKey, isExcluded, activityGroupsPresent,
       DEFAULT_SETTINGS
     };`, sandbox, { filename: 'app-bundle.js' });
 

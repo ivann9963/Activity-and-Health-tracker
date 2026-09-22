@@ -452,3 +452,55 @@ a.metric-tile:hover { border-color: var(--accent); }
 /* An uncategorised group is reported, not hidden — but it should not look like a
    sport you chose to do. */
 .metric-tile.is-unlabelled .metric-name { color: var(--warn); }
+
+/* --- setting an activity aside ---------------------------------------------------- */
+/* The × lives on the tile it acts on, so hiding something is done where you noticed it
+   rather than in a settings screen two taps away. Faint but always drawn — this is a
+   phone app, and a control that only exists on hover does not exist. */
+.metric-tile { position: relative; }
+
+.tile-hide {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .45;
+  transition: opacity .12s ease, background .12s ease;
+}
+/* A long name like "Racket sports" wraps to two lines and would run under the ×. */
+.tile-hide ~ .metric-head { padding-right: 24px; }
+.metric-tile:hover .tile-hide { opacity: 1; }
+.tile-hide:hover { background: var(--surface-2); color: var(--text); }
+.tile-hide:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.hidden-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+.chip-toggle:hover { color: var(--text); border-color: var(--text-dim); }
+.chip-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

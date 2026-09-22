@@ -182,7 +182,7 @@ async function appleTests() {
   const res = await parseFixture(1 << 20); // one chunk
   fixtureResult = res;
   suite('Apple Health parser', () => {
-    eq('every Record element is counted', res.tally.records, 22);
+    eq('every Record element is counted', res.tally.records, 23);
     eq('every Workout element is counted', res.tally.workouts, 6);
     eq('the export date is read', res.meta.exportDate, '2026-09-20 11:02:19 +0300');
     eq('coverage starts at the oldest record', res.tally.from, '2019-06-01');
@@ -233,14 +233,18 @@ async function appleTests() {
     eq('sleep is attributed to the wake day', sleep[0].localDate, '2024-03-12');
     eq('only genuinely-asleep stages count', sleep[0].value, 420);
 
-    // Heart rate: 140 held 1 min, 150 held 2 min (both in the 140 band), 165 held
-    // 1 min and 175 held 56 min capped to 5 (both in the 160 band). The final
-    // reading of the stream has no following sample, so it has no span — which is
-    // correct, since nothing in the file says how long it lasted.
-    eq('time in the 140 band', byMetric('hr_band_140')[0].value, 180);
+    // Heart rate: 140 held 1 min and 150 held 1 min (both in the 140 band), 95 held
+    // 1 min while jogging easy, 165 held 1 min and 175 held 56 min capped to 5 (both
+    // in the 160 band). The final reading of the stream has no following sample, so
+    // it has no span — which is correct, since nothing in the file says how long it
+    // lasted.
+    eq('time in the 140 band', byMetric('hr_band_140')[0].value, 120);
     eq('time in the 160 band, with the long gap capped', byMetric('hr_band_160')[0].value, 360);
     eq('a band nobody reached is not stored', byMetric('hr_band_100').length, 0);
-    eq('the last reading contributes no span', byMetric('hr_band_0').length, 0);
+    // An easy minute inside the workout is recorded rather than discarded: the screen
+    // leaves it out of the chart, but the number has to exist to be left out.
+    eq('a resting stretch inside a workout is still banded',
+       byMetric('hr_band_0')[0].value, 60);
 
     ok('an unmapped record type is reported but not stored',
        res.tally.types['HKQuantityTypeIdentifierEnvironmentalAudioExposure'].count === 1 &&
@@ -1026,7 +1030,7 @@ async function heartRateWindowTests() {
     // The fixture's readings sit inside the 18:00 run except the last, an hour later
     // while sitting down. Without windows that idle hour contributed a capped five
     // minutes to the 160 band; with them it contributes nothing.
-    eq('readings inside the workout still count', band(140).value, 180);
+    eq('readings inside the workout still count', band(140).value, 120);
     eq('the reading after it no longer credits an idle gap', band(160).value, 60);
 
     // Everything that is not heart rate is unaffected.
@@ -1096,6 +1100,44 @@ function insightsTests() {
     ok('and they did not merge',
        share.some(r => r.label === 'Golf') && share.some(r => r.label === 'Climbing'));
     ok('no row is called "Other"', !share.some(r => r.label === 'Other'));
+  });
+
+  suite('hiding an activity you do not want to see', () => {
+    // The regression this exists for: "Dance" is an unmapped Apple type, so it has no
+    // entry in ACTIVITIES. A hide list keyed only on canonical activities could not
+    // name it, and the one row the user actually wanted gone was the one row they
+    // could not switch off.
+    const dance = S({ activity: 'other', rawActivity: 'HKWorkoutActivityTypeCardioDance',
+                      durationSec: 3600 });
+    const run = S({ activity: 'running', durationSec: 1800 });
+    const bare = S({ activity: 'other', rawActivity: null, durationSec: 900,
+                     source: { vendor: 'apple', app: 'Fitbit' } });
+
+    const groups = app.activityGroupsPresent([dance, run, bare]);
+    eq('every activity present is offered, mapped or not', groups.length, 3);
+    ok('including the unmapped one, by its own name',
+       groups.some(g => g.label === 'Dance'));
+    ok('and the uncategorised ones, as one entry',
+       groups.some(g => g.key === 'unlabelled'));
+    eq('ordered by how much time they account for', groups[0].label, 'Dance');
+
+    const key = groups.find(g => g.label === 'Dance').key;
+    const share = app.timeByActivity([dance, run, bare], { exclude: [key] });
+    ok('hiding it removes the row', !share.some(r => r.label === 'Dance'));
+    eq('and its time leaves the denominator, so the rest add up',
+       Math.round(share.reduce((n, r) => n + r.pct, 0)), 100);
+
+    // A canonical id must keep working: that is what every existing setting holds.
+    const noRun = app.timeByActivity([dance, run], { exclude: ['running'] });
+    eq('a plain activity id still excludes', noRun.length, 1);
+    eq('leaving the other at the whole of the time', Math.round(noRun[0].pct), 100);
+
+    // Active days uses the same list, so "set aside" means set aside everywhere.
+    const days = app.activeDays([dance], '2026-03-01', '2026-03-03', [key]);
+    eq('a day of only set-aside activity is not an active day', days.active, 0);
+    eq('but it is not counted as nothing happening either', days.ambientOnly, 1);
+    eq('while counting it makes the day active',
+       app.activeDays([dance], '2026-03-01', '2026-03-03', []).active, 1);
   });
 
   suite('where the time goes', () => {

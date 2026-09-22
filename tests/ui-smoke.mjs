@@ -147,8 +147,33 @@ try {
     /active days/i.test(insights) && /not counted/i.test(insights), insights.slice(0, 400));
   check('where the time went renders as tiles',
     (await page.locator('.card:has-text("Where the time went") .metric-tile').count()) >= 1);
+  // Hiding an activity from the tile it appears on: the whole point is that the
+  // percentages are recomputed, so the remaining ones still total 100.
+  const tiles = page.locator('.card:has-text("Where the time went") .metric-tile');
+  const tileCount = await tiles.count();
+  const hiddenName = await tiles.first().locator('.metric-name').innerText();
+  await tiles.first().locator('.tile-hide').click({ force: true });
+  await page.waitForFunction(
+    n => document.querySelectorAll('.metric-tile').length < n, tileCount,
+    { timeout: 10000 });
+  const afterHide = await page.locator('#view-host').innerText();
+  check('setting an activity aside drops its tile',
+    !new RegExp(`\\b${hiddenName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
+      .test(afterHide.split('Set aside:')[0]), afterHide.slice(0, 500));
+  check('and says where it went, so it can be brought back',
+    /set aside/i.test(afterHide) &&
+    (await page.locator('[data-show-activity]').count()) >= 1);
+  await page.locator('[data-show-activity]').first().click();
+  await page.waitForFunction(
+    n => document.querySelectorAll('.metric-tile').length === n, tileCount,
+    { timeout: 10000 });
+  check('counting it again restores the tile',
+    (await page.locator('.card:has-text("Where the time went") .metric-tile').count())
+      === tileCount);
+
+  const insights2 = await page.locator('#view-host').innerText();
   check('effort by sport reports a weighted average',
-    /effort by sport/i.test(insights) && /bpm/.test(insights), insights.slice(0, 900));
+    /effort by sport/i.test(insights2) && /bpm/.test(insights2), insights2.slice(0, 900));
   check('the period can be switched', (await page.locator('[data-insight]').count()) === 3);
 
   // Heart-rate bands live in 2024 in the fixture, so stepping back a year is also a
@@ -169,6 +194,15 @@ try {
   check('and the bands are labelled as ranges', /140–159 bpm/.test(hr2024));
   // The dropdown restated what the bands already showed.
   check('no redundant threshold control', (await page.locator('#hr-threshold').count()) === 0);
+  // Almost every hour of a life sits under 100 bpm, so charting it buries the rest.
+  const hrCard = page.locator('.card:has-text("Time by heart rate")');
+  const hrRows = await hrCard.locator('.share-row').allTextContents();
+  check('the resting band is not charted against the working ones',
+    !hrRows.some(r => /0–99 bpm/.test(r)), JSON.stringify(hrRows));
+  // The disclosure is collapsed, so read the text rather than what is laid out.
+  const hrAll = await hrCard.evaluate(n => n.textContent);
+  check('but it is still accounted for, not silently dropped',
+    /below 100 bpm/i.test(hrAll), hrAll.slice(0, 600));
 
   // --- metric detail and goals ---
   await page.locator('.nav-btn:has-text("Home")').click();

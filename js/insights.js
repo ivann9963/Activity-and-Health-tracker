@@ -8,6 +8,44 @@
 
 const counted = s => !s.supersededBy;
 
+// The key a session is grouped and excluded by. Known categories use their activity;
+// anything the app could not categorise uses its own name, which is precisely what
+// someone wants to switch off — "I do not want to see Dance right now" is not
+// answerable if Dance has no identity of its own.
+function sessionKey(session) {
+  const named = activityLabel(session.activity, session.rawActivity);
+  if (named === 'Unlabelled') return 'unlabelled';
+  return activityGroupKey(session.activity, session.rawActivity);
+}
+
+// Matches on either the group key or the bare activity, so a stored exclusion keeps
+// working whichever form it was saved in.
+function isExcluded(session, exclude) {
+  if (!exclude || !exclude.length) return false;
+  return exclude.indexOf(sessionKey(session)) !== -1 ||
+         exclude.indexOf(session.activity) !== -1;
+}
+
+// Every distinct activity in a set of sessions, with how much time each accounts for.
+// Settings uses this so the list offered is what the person actually does, rather than
+// a fixed menu that omits half their data.
+function activityGroupsPresent(sessions) {
+  const groups = new Map();
+  for (const s of sessions) {
+    if (!counted(s) || !s.durationSec) continue;
+    const key = sessionKey(s);
+    const named = activityLabel(s.activity, s.rawActivity);
+    const label = key === 'unlabelled' ? 'Uncategorised workouts' : named;
+    const g = groups.get(key) ||
+      { key, label, icon: (ACTIVITIES[s.activity] || {}).icon || (key === 'unlabelled' ? '❓' : '💪'),
+        seconds: 0, sessions: 0 };
+    g.seconds += s.durationSec;
+    g.sessions++;
+    groups.set(key, g);
+  }
+  return [...groups.values()].sort((a, b) => b.seconds - a.seconds);
+}
+
 // --- where the time goes ------------------------------------------------------------
 // The answer to "what did I actually spend the year doing". Share of time, not share
 // of sessions: twelve short runs and twelve long gym sessions are not the same year.
@@ -20,18 +58,16 @@ function timeByActivity(sessions, opts) {
     if (!counted(s)) continue;
     const seconds = s.durationSec || 0;
     if (seconds <= 0) continue;
-    // What is ambient rather than chosen is the user's call — see settings.notWorkouts.
-    if (o.exclude && o.exclude.indexOf(s.activity) !== -1) continue;
+    if (isExcluded(s, o.exclude)) continue;
 
     // Unrecognised workouts group by their own type rather than pooling into one
     // "Other" bar, which would hide the only thing that explains them.
     const named = activityLabel(s.activity, s.rawActivity);
-    // Where the source recorded no category at all, group by the source instead of
-    // pooling every uncategorised workout from every device into one anonymous bar.
+    // Where the source recorded no category at all, say which device logged it —
+    // that is the thread someone can pull on to identify it.
     const unlabelled = named === 'Unlabelled';
     const label = unlabelled ? `Uncategorised · ${sourceLabel(s.source)}` : named;
-    const key = unlabelled ? 'unlabelled:' + sourceLabel(s.source)
-                           : activityGroupKey(s.activity, s.rawActivity);
+    const key = sessionKey(s);
 
     const entry = totals.get(key) ||
       { seconds: 0, activity: s.activity, label, unlabelled, sessions: [] };
@@ -162,7 +198,7 @@ function activeDays(sessions, fromDate, toDate, notWorkouts) {
   for (const s of sessions) {
     if (!counted(s)) continue;
     if (s.localDate < fromDate || s.localDate > toDate) continue;
-    if (ambient.has(s.activity)) ambientOnly.add(s.localDate);
+    if (ambient.has(sessionKey(s)) || ambient.has(s.activity)) ambientOnly.add(s.localDate);
     else active.add(s.localDate);
   }
   for (const day of active) ambientOnly.delete(day);
@@ -181,5 +217,6 @@ function activeDays(sessions, fromDate, toDate, notWorkouts) {
 
 if (typeof module !== 'undefined') {
   module.exports = { timeByActivity, avgHrByActivity, sessionPace, formatPace,
-                     paceProgression, bestPaces, activeDays };
+                     paceProgression, bestPaces, activeDays,
+                     sessionKey, isExcluded, activityGroupsPresent };
 }

@@ -50,6 +50,9 @@ function insightsHtml(sessions, hrBands, paceSessions, range, settings) {
   const days = activeDays(sessions, range.from, range.to, notWorkouts);
   const hr = avgHrByActivity(sessions);
   const totalSeconds = share.reduce((n, s) => n + s.seconds, 0);
+  // What was set aside, named — a hidden thing with no way back is a bug, not a setting.
+  const hidden = activityGroupsPresent(sessions)
+    .filter(g => notWorkouts.indexOf(g.key) !== -1);
 
   return `
     <div class="segmented" role="tablist">
@@ -65,17 +68,24 @@ function insightsHtml(sessions, hrBands, paceSessions, range, settings) {
               ${isCurrentPeriod(range, settings.firstDayOfWeek) ? 'disabled' : ''}>›</button>
     </div>
 
-    ${shareCardHtml(share, totalSeconds)}
+    ${shareCardHtml(share, totalSeconds, hidden)}
     ${activeDaysCardHtml(days)}
     ${hrBandCardHtml(hrBands)}
     ${hrByActivityCardHtml(hr)}
     ${paceCardHtml(paceSessions)}`;
 }
 
-function shareCardHtml(share, totalSeconds) {
+function shareCardHtml(share, totalSeconds, hidden) {
+  const hiddenRow = (hidden || []).length ? `
+    <div class="hidden-row">
+      <span class="subtle">Set aside:</span>
+      ${hidden.map(g => `<button class="chip-toggle" data-show-activity="${escHtml(g.key)}"
+          title="Count ${escHtml(g.label)} again">${g.icon} ${escHtml(g.label)} <span aria-hidden="true">+</span></button>`).join('')}
+    </div>` : '';
+
   if (!share.length) {
     return `<div class="card"><h2>Where the time went</h2>
-      <p class="subtle">No workouts recorded in this period.</p></div>`;
+      <p class="subtle">No workouts recorded in this period.</p>${hiddenRow}</div>`;
   }
   const top = share[0];
   const unlabelled = share.filter(s => s.unlabelled);
@@ -86,6 +96,9 @@ function shareCardHtml(share, totalSeconds) {
        ${Math.round(top.pct)}% of ${escHtml(formatMetric('time_gym', totalSeconds))}.</p>
     <div class="metric-grid">
       ${share.map(s => `<div class="metric-tile ${s.unlabelled ? 'is-unlabelled' : ''}">
+        <button class="tile-hide" data-hide-activity="${escHtml(s.key)}"
+                aria-label="Set aside ${escHtml(s.label)}"
+                title="Set aside ${escHtml(s.label)}">×</button>
         <div class="metric-head">
           <span class="metric-icon" aria-hidden="true">${s.icon}</span>
           <span class="metric-name">${escHtml(s.label)}</span>
@@ -94,6 +107,7 @@ function shareCardHtml(share, totalSeconds) {
         <div class="metric-delta neutral">${Math.round(s.pct)}% of your time</div>
       </div>`).join('')}
     </div>
+    ${hiddenRow}
     ${unlabelled.length ? unlabelledDetailHtml(unlabelled) : ''}
     <details class="why"><summary>How this is counted</summary>
       <p class="subtle">Share of time, not number of sessions — twelve short runs and
@@ -155,14 +169,18 @@ function hrBandCardHtml(bands) {
          it arrives with the next import.</p></div>`;
   }
 
+  const REPORTED_FLOOR = 100;
+  const shown = rows.filter(r => r.floor >= REPORTED_FLOOR && r.seconds > 0).reverse();
+  const belowFloor = rows.filter(r => r.floor < REPORTED_FLOOR)
+                         .reduce((n, r) => n + r.seconds, 0);
   const hard = rows.filter(r => r.floor >= 140).reduce((n, r) => n + r.seconds, 0);
-  const max = Math.max(...rows.map(r => r.seconds));
+  const max = Math.max(...shown.map(r => r.seconds), 0);
 
   return `<div class="card">
     <h2>Time by heart rate</h2>
     <div class="hero-inline">${escHtml(formatMetric('time_gym', hard))}
       <span class="subtle">above 140 bpm</span></div>
-    ${rows.filter(r => r.seconds > 0).reverse().map(r => `
+    ${shown.map(r => `
       <div class="share-row">
         <span class="share-label">${escHtml(r.label)}</span>
         <span class="share-value">${escHtml(formatMetric('time_gym', r.seconds))}</span>
@@ -170,9 +188,15 @@ function hrBandCardHtml(bands) {
           style="width:${max ? (r.seconds / max * 100).toFixed(1) : 0}%"></div></div>
       </div>`).join('')}
     <details class="why"><summary>How this is measured</summary>
+      <p class="subtle">Only heart rate recorded during a workout is counted — the rest
+         of the day is sitting still and would drown everything else.</p>
       <p class="subtle">Bands are exclusive, so any threshold is the sum of the bands
          above it. Each reading counts for the gap until the next one, capped at five
          minutes — a longer gap means the watch was off, not a slow heartbeat.</p>
+      ${belowFloor ? `<p class="subtle">Below ${REPORTED_FLOOR} bpm:
+        ${escHtml(formatMetric('time_gym', belowFloor))} — warm-ups, rests between sets
+        and the walk to the car. Not shown, because it dwarfs the rest and says
+        nothing about effort.</p>` : ''}
     </details>
   </div>`;
 }
@@ -265,8 +289,27 @@ function wireInsights(firstDay) {
     _insightAnchor = shiftPeriod(_insightAnchor || todayLocal(), _insightPeriod, 1, firstDay);
     refreshView();
   };
-  const hr = el('hr-threshold');
-  if (hr) hr.onchange = () => { _hrThreshold = Number(hr.value); refreshView(); };
+  // Hiding an activity is done where the activity is, not in a settings screen two
+  // taps away. It writes the same setting, so the two stay in step.
+  document.querySelectorAll('[data-hide-activity]').forEach(b => {
+    b.onclick = () => setActivityCounted(b.dataset.hideActivity, false);
+  });
+  document.querySelectorAll('[data-show-activity]').forEach(b => {
+    b.onclick = () => setActivityCounted(b.dataset.showActivity, true);
+  });
+}
+
+// Shared by the tile's × and the "set aside" chips, so one path writes the setting.
+function setActivityCounted(key, counted) {
+  return loadSettings().then(settings => {
+    const off = new Set(settings.notWorkouts || []);
+    if (counted) off.delete(key); else off.add(key);
+    const next = [...off];
+    return setSetting('notWorkouts', next).then(() => {
+      showToast(counted ? 'Counted again' : 'Set aside — percentages redone', 'success');
+      refreshView();
+    });
+  });
 }
 
 registerView({ id: 'insights', label: 'Insights', icon: '📊', render: renderInsights });
