@@ -978,3 +978,33 @@ a.metric-tile:active { transform: scale(.99); }
                 font-feature-settings: var(--numerals); letter-spacing: -0.01em; }
 .record-when { font-size: 12px; line-height: 18px; color: var(--text-tertiary);
                font-variant-numeric: tabular-nums; }
+
+/* --- recent workouts ---------------------------------------------------------------
+   The raw rows behind the totals. Dense on purpose: this is a ledger page, scanned
+   for one line, not read. A row that is not in the totals says so on itself. */
+.recent-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  grid-template-areas:
+    "icon date  name   source"
+    ".    facts facts  facts"
+    ".    note  note   note";
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-secondary);
+}
+.recent-row:last-of-type { border-bottom: 0; }
+.recent-row.is-aside { opacity: .55; }
+
+.recent-icon  { grid-area: icon; color: var(--text-tertiary); align-self: center; }
+.recent-date  { grid-area: date; font-size: 12px; line-height: 18px;
+                color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.recent-name  { grid-area: name; font-size: 14px; line-height: 20px; font-weight: 600; }
+.recent-source{ grid-area: source; font-size: 12px; line-height: 18px;
+                color: var(--text-quaternary); white-space: nowrap; }
+.recent-facts { grid-area: facts; font-size: 13px; line-height: 18px;
+                color: var(--text-secondary); font-variant-numeric: tabular-nums;
+                margin-top: 2px; }
+.recent-note  { grid-area: note; font-size: 12px; line-height: 18px;
+                color: var(--warning-fg); margin-top: 2px; }

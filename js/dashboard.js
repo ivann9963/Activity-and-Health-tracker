@@ -95,7 +95,12 @@ function metricTileHtml(id, current, previous, bounds, goals, settings) {
   const metric = METRICS[id];
   const value = current && current.value;
   const prevValue = previous && previous.value;
-  const empty = value == null || value === 0;
+  const noValue = value == null || value === 0;
+  // A session the app HAS but cannot measure is not the same as no session. Report
+  // the time instead of a dash, and say why the headline figure is missing —
+  // otherwise the app tells you that you did not train when it knows you did.
+  const unmeasured = noValue && current && current.withoutValue > 0;
+  const empty = noValue && !unmeasured;
   const goal = goals && goals[goalId(id, _period)];
 
   return `<a class="metric-tile ${empty ? 'is-empty' : 'has-data'}" href="#/metric/${id}">
@@ -103,8 +108,13 @@ function metricTileHtml(id, current, previous, bounds, goals, settings) {
       <span class="metric-icon">${iconOrText(metric.icon)}</span>
       <span class="metric-name">${escHtml(metric.label)}</span>
     </div>
-    <div class="metric-value"${empty ? '' : ' data-count'}>${escHtml(formatMetric(id, value))}</div>
-    ${empty ? '' : deltaHtml(id, value, prevValue) + barsHtml(id, current && current.byDay, bounds)}
+    <div class="metric-value"${empty || unmeasured ? '' : ' data-count'}>${
+      unmeasured ? escHtml(formatMetric('time_gym', current.secondsWithoutValue))
+                 : escHtml(formatMetric(id, value))}</div>
+    ${unmeasured ? `<div class="metric-delta neutral">${
+      plural(current.withoutValue, 'session')} · no ${
+      metric.display === 'km' ? 'distance' : 'duration'} recorded</div>` : ''}
+    ${empty || unmeasured ? '' : deltaHtml(id, value, prevValue) + barsHtml(id, current && current.byDay, bounds)}
     ${goal ? goalMeterHtml(id, goal.target, value, bounds) : ''}
     ${!goal && metric.kind === 'total' && current && current.activeDays
       ? `<div class="metric-sub">${plural(current.activeDays, 'active day')}</div>`

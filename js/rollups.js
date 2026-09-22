@@ -23,12 +23,26 @@ function computeRollups(sessions, daily, fromDate, toDate, ids) {
   const byActivity = {};
   for (const id of sessionMetrics) byActivity[METRICS[id].activity] = id;
 
+  // Sessions whose tracked field is missing are counted separately rather than
+  // skipped silently. A run with no distance is still a run: a treadmill logs no
+  // GPS, and a watch relaying a workout to another app often drops the distance with
+  // it. Dropping it here makes the app report that nothing happened, which is worse
+  // than reporting an incomplete figure — it is the one answer that is certainly
+  // wrong.
+  const tally = {};
+  for (const id of sessionMetrics) tally[id] = { sessions: 0, withoutValue: 0, secondsWithoutValue: 0 };
+
   for (const s of sessions) {
     if (!isCounted(s) || s.localDate < fromDate || s.localDate > toDate) continue;
     const id = byActivity[s.activity];
     if (!id) continue;
+    tally[id].sessions++;
     const v = s[METRICS[id].field];
-    if (v == null) continue;
+    if (v == null) {
+      tally[id].withoutValue++;
+      tally[id].secondsWithoutValue += s.durationSec || 0;
+      continue;
+    }
     byMetric[id][s.localDate] = (byMetric[id][s.localDate] || 0) + v;
   }
 
@@ -47,7 +61,10 @@ function computeRollups(sessions, daily, fromDate, toDate, ids) {
     out[id] = {
       value: aggregate(values, METRICS[id].periodAgg),
       activeDays: values.filter(v => v > 0).length,
-      byDay
+      byDay,
+      // Present only for session-backed metrics; the views use these to say "one run,
+      // distance not recorded" instead of showing a dash.
+      ...(tally[id] || {})
     };
   }
   return out;

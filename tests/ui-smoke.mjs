@@ -301,6 +301,17 @@ try {
 
   await page.locator('.nav-btn:has-text("Data")').click();
   await page.waitForSelector('button:has-text("Review the decisions")', { timeout: 10000 });
+  // The ledger page. "I trained yesterday and the total says I did not" has no
+  // answer without being able to see the rows as stored.
+  check('the stored workouts can be listed, newest first',
+    (await page.locator('.recent-row').count()) >= 4,
+    `got ${await page.locator('.recent-row').count()}`);
+  const recentText = await page.locator('.card:has(.recent-row)').first().innerText();
+  check('each row names its source, so a missing one can be traced to a file',
+    /Apple Watch|iPhone|Fitbit|Strava|Withings/.test(recentText), recentText.slice(0, 300));
+  check('and a row dedupe set aside says so rather than vanishing',
+    (await page.locator('.recent-row.is-aside').count()) >= 1);
+
   check('the Data screen reports what reconciliation did', true);
   await page.locator('button:has-text("Review the decisions")').click();
   await page.waitForSelector('.dup-group', { timeout: 10000 });

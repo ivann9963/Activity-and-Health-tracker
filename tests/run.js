@@ -1131,6 +1131,46 @@ async function heartRateWindowTests() {
   });
 }
 
+// --- a session the app cannot measure ------------------------------------------------
+function unmeasuredSessionTests() {
+  const base = { activity: 'running', localDate: '2026-09-21', tzOffset: 0,
+                 start: Date.parse('2026-09-21T07:00:00Z'),
+                 end: Date.parse('2026-09-21T07:42:00Z'), durationSec: 2520,
+                 source: { vendor: 'apple', app: 'Apple Health', device: 'Fitbit' } };
+
+  suite('a run with no distance is still a run', () => {
+    // The bug this exists for: the dashboard showed a dash for Running on a day the
+    // user had run, because the session carried duration but no distance — which is
+    // what a treadmill records, and what a relayed workout often loses. Reporting
+    // nothing is the one answer that is certainly wrong.
+    const noDistance = app.makeSession({ ...base, distanceM: null });
+    const r = app.computeRollups([noDistance], [], '2026-09-21', '2026-09-27', ['distance_run']);
+
+    // null, not 0: "no distance recorded" and "ran zero kilometres" are different
+    // claims, and the rollup has always been careful to say the first.
+    eq('the distance total stays absent, because there is none',
+       r.distance_run.value, null);
+    eq('but the session is counted', r.distance_run.sessions, 1);
+    eq('and flagged as unmeasured', r.distance_run.withoutValue, 1);
+    eq('with the time it does know about', r.distance_run.secondsWithoutValue, 2520);
+
+    // A normal run is unaffected: nothing is flagged and the distance is the total.
+    const measured = app.makeSession({ ...base, distanceM: 8000,
+                                       start: base.start + 86400000, end: base.end + 86400000 });
+    const both = app.computeRollups([noDistance, measured], [],
+                                    '2026-09-21', '2026-09-27', ['distance_run']);
+    eq('a measured run still totals normally', both.distance_run.value, 8000);
+    eq('both runs are counted', both.distance_run.sessions, 2);
+    eq('and only the unmeasured one is flagged', both.distance_run.withoutValue, 1);
+
+    // A week with nothing at all must stay distinguishable from a week with an
+    // unmeasured session — they are different facts and must not render alike.
+    const none = app.computeRollups([], [], '2026-09-21', '2026-09-27', ['distance_run']);
+    eq('an empty week counts no sessions', none.distance_run.sessions, 0);
+    eq('and flags nothing', none.distance_run.withoutValue, 0);
+  });
+}
+
 // --- daily targets, streaks and records ---------------------------------------------
 function targetTests() {
   const S = (over) => ({ activity: 'running', localDate: '2026-03-02',
@@ -1488,6 +1528,7 @@ function insightsTests() {
     chartTests();
     insightsTests();
     targetTests();
+    unmeasuredSessionTests();
     await heartRateSpanTests();
     await heartRateWindowTests();
     await zipTests();

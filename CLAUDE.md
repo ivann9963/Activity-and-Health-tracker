@@ -47,6 +47,13 @@ plausible and are wrong.
   the importer credits time to whichever copy of a workout owned the clock, and that
   need not be the copy dedupe keeps, **the winner inherits the fullest band set in its
   group** (`dedupe/sessions.js`); the richest set, never the sum.
+- **A session whose tracked field is missing is counted, not skipped.** `distance_run`
+  reads `distanceM`; a treadmill run records none, and a workout relayed between apps
+  often loses it. Dropping it made the dashboard show a dash on a day the user had
+  trained — the one answer that is certainly wrong. `computeRollups` returns
+  `sessions`, `withoutValue` and `secondsWithoutValue` alongside the total so a view
+  can say "1 session, no distance recorded" instead. The total itself stays `null`,
+  never `0`: "no distance recorded" and "ran zero kilometres" are different claims.
 - **A reading is worth the gap to the next reading of the SAME workout.** Across a
   boundary it is worth nothing. Closing the last reading of a workout against the end
   of the workout would invent up to five minutes of effort per session.
@@ -71,6 +78,11 @@ the others could not:
 - `npm run perf` found a memory leak that would have failed a real import on a phone.
   Substrings in V8 pin their parent buffer; strings kept on records are interned in
   `import/normalize.js` for that reason.
+
+When a total is disputed, **Data → Recent workouts** lists the sessions as stored,
+including the copies dedupe set aside and the rows whose figures are incomplete, each
+naming its source. Every other screen aggregates; this is the only one that shows the
+rows, and it is the first place to look when someone says a number is wrong.
 
 **Look at the rendered app.** Axis ticks reading "0.00 km", a clipped axis, and empty
 tiles eating a phone screen were all invisible to every test and obvious in a
