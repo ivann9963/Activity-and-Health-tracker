@@ -140,11 +140,24 @@ export async function handleAccessToken(request, env) {
 
 // GET /api/oauth/status — whether this browser has a connection. Says nothing about
 // the token itself, only that one exists.
+//
+// When the deployment is not configured it names which variables are absent. Setting
+// these up involves a dashboard with more than one place to put a variable, and
+// "configured: false" alone cannot tell a misspelled name from one added in the wrong
+// section. Reporting the missing NAMES leaks nothing — they are in this file — while
+// turning a dead end into a single obvious fix.
 export function handleStatus(request, env) {
-  return json({
+  const missing = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].filter(name => !env[name]);
+  const body = {
     connected: !!readCookie(request, REFRESH_COOKIE),
     configured: isConfigured(env)
-  });
+  };
+  if (missing.length) {
+    body.missing = missing;
+    body.hint = 'Add these as runtime Secrets on the Worker (Settings → Variables and ' +
+                'Secrets), not as build variables, then redeploy.';
+  }
+  return json(body);
 }
 
 // POST /api/oauth/disconnect — forget the connection, and tell Google to forget it.
