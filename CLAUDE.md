@@ -47,6 +47,20 @@ plausible and are wrong.
   the importer credits time to whichever copy of a workout owned the clock, and that
   need not be the copy dedupe keeps, **the winner inherits the fullest band set in its
   group** (`dedupe/sessions.js`); the richest set, never the sum.
+- **An unlisted sport is read from its own words, not dumped in `other`.** The vendor
+  tables can only list names somebody has already hit; Fitbit and Strava let a name be
+  nearly free text. `Padel` was mapped for Apple and missing from both others, so a
+  week of padel read as nothing at all — stored and listed, but `other` belongs to no
+  metric. `activityFromKeywords` is the ordered fallback (`canonicalActivity` tries the
+  table first), and the order is load-bearing: "table tennis" before "tennis",
+  "treadmill" as running rather than walking. A name with nothing to go on still
+  returns `other`; the fallback guesses from evidence, never from nothing.
+- **Improving the mapping does nothing for data already imported**, because `activity`
+  is derived at import and stored. `js/recategorise.js` re-runs the decision over
+  stored sessions using their kept `rawActivity` and re-runs dedupe after, since
+  changing an activity changes which records can be the same workout. Safe because
+  `sessionId` hashes `rawActivity || activity`, so a re-read record keeps its id. The
+  Data screen offers it only when there is something to do.
 - **A metric may cover a FAMILY of activities, not one key** (`METRICS[id].activities`,
   read through `metricActivities()`). Gym covers `strength` and `hiit`: Apple calls a
   circuit `HighIntensityIntervalTraining`, `hiit` has no tile of its own, and counting

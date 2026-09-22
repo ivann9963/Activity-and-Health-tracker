@@ -72,6 +72,43 @@ function loadRecentSessions() {
 // same records through the same rules and prints what it finds, so the discrepancy
 // becomes something anybody can point at.
 
+// Offered only when there is something to do. A button that reports "0 changed" every
+// time teaches people to ignore it.
+function recategoriseHtml(changes) {
+  if (!changes.length) return '';
+  return `<div class="card">
+    <h2>Re-read ${plural(changes.length, 'workout')}</h2>
+    <p class="subtle">These were filed under a category that no longer matches how the
+       app reads their name — usually a sport added to the mapping after they were
+       imported. Their times and figures do not change; only which total they count
+       towards. No re-import needed.</p>
+    <ul class="recat-list">
+      ${recategoriseSummary(changes).map(line => `<li>${escHtml(line)}</li>`).join('')}
+    </ul>
+    <div class="card-actions">
+      <button class="btn btn-primary btn-small" id="do-recat">
+        ${icon('refresh', 16)} Re-read them</button>
+    </div>
+  </div>`;
+}
+
+function wireRecategorise(changes) {
+  const btn = el('do-recat');
+  if (!btn) return;
+  btn.onclick = () => {
+    btn.disabled = true;
+    return applyRecategorise(changes)
+      .then(r => {
+        showToast(`${plural(r.changed, 'workout')} re-read`, 'success');
+        refreshView();
+      })
+      .catch(err => {
+        btn.disabled = false;
+        showToast('Could not re-read: ' + err.message, 'error');
+      });
+  };
+}
+
 function rangeCheckHtml() {
   const to = todayLocal();
   const from = addDays(to, -13);

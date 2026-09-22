@@ -31,7 +31,8 @@ const FILES = [
   'js/goals.js',
   'js/charts.js',
   'js/insights.js',
-  'js/targets.js'
+  'js/targets.js',
+  'js/recategorise.js'
 ];
 
 function loadApp() {
@@ -89,6 +90,7 @@ function loadApp() {
       distanceEquivalence, durationEquivalence, stepsEquivalence, equivalenceFor,
       dayStreaks, weekStreaks, bestDay, bestPeriod, activeThreshold,
       niceTarget, deriveTarget, goalProgress,
+      activityFromKeywords, recategorisePlan, recategoriseSummary,
       timeByActivity, avgHrByActivity, sessionPace, formatPace, paceProgression,
       bestPaces, activeDays, sessionKey, isExcluded, activityGroupsPresent, hrBandTotals,
       targetComparison, meetsTarget, targetResult, workoutStreaks, sessionRecords,

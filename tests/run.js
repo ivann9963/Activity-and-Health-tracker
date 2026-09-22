@@ -1131,6 +1131,84 @@ async function heartRateWindowTests() {
   });
 }
 
+// --- naming a sport the tables never listed -----------------------------------------
+function activityNamingTests() {
+  suite('an unlisted sport is named from its own words', () => {
+    // The bug this exists for: a week of padel read as nothing. Padel was mapped for
+    // Apple but not for Fitbit or Strava, so those sessions landed on 'other' — which
+    // belongs to no metric, making them stored, listed, and absent from every total.
+    eq('padel from Fitbit is a racket sport',
+       app.canonicalActivity('fitbit', 'Padel'), 'racket');
+    eq('and from Strava', app.canonicalActivity('strava', 'Padel'), 'racket');
+    eq('and from Apple, which already knew it',
+       app.canonicalActivity('apple', 'HKWorkoutActivityTypePadel'), 'racket');
+
+    // The tables can only list names somebody has already hit, so an unlisted name
+    // falls back to the words in it rather than to 'other'.
+    eq('a name no table lists is read', app.canonicalActivity('fitbit', 'Padel Tennis'), 'racket');
+    eq('weight lifting is gym time', app.canonicalActivity('fitbit', 'Weight Lifting'), 'strength');
+    eq('an indoor run is a run', app.canonicalActivity('fitbit', 'Indoor Run'), 'running');
+    eq('a treadmill is running, not walking',
+       app.canonicalActivity('fitbit', 'Treadmill Workout'), 'running');
+    eq('open water counts as swimming',
+       app.canonicalActivity('fitbit', 'Open Water Swim'), 'swimming');
+
+    // Order matters where one word contains another.
+    eq('table tennis is not tennis-then-something',
+       app.canonicalActivity('fitbit', 'Table Tennis'), 'racket');
+    eq('and a plain walk is still a walk', app.canonicalActivity('fitbit', 'Walk'), 'walking');
+
+    // Apple's vocabulary is closed, but an unlisted type still carries its own name.
+    eq('an unmapped Apple type is read from its camel case',
+       app.canonicalActivity('apple', 'HKWorkoutActivityTypePaddleTennis'), 'racket');
+
+    // A name with nothing to go on stays honest rather than being guessed at.
+    eq('a name that says nothing stays uncategorised',
+       app.canonicalActivity('fitbit', 'Session 4'), 'other');
+    eq('and so does an empty one', app.canonicalActivity('fitbit', ''), 'other');
+    eq('the keyword reader alone returns nothing for gibberish',
+       app.activityFromKeywords('qqq'), null);
+  });
+}
+
+// --- re-reading what is already stored ----------------------------------------------
+function recategoriseTests() {
+  const S = (over) => app.makeSession({
+    activity: 'other', rawActivity: 'Padel', localDate: '2026-09-15', tzOffset: 0,
+    start: Date.parse('2026-09-15T18:00:00Z'), end: Date.parse('2026-09-15T19:00:00Z'),
+    durationSec: 3600,
+    source: { vendor: 'fitbit', app: 'Google Health', device: 'Fitbit' }, ...over });
+
+  suite('stored workouts can be re-read without re-importing', () => {
+    // A session's activity is decided at import and stored. Improving the mapping
+    // does nothing for data already in the app, and asking someone to re-import a
+    // gigabyte because a sport was added to a table is not a reasonable ask.
+    const stale = S();
+    const plan = app.recategorisePlan([stale]);
+    eq('a session filed under the old mapping is found', plan.length, 1);
+    eq('and the move is stated', [plan[0].from, plan[0].to], ['other', 'racket']);
+    ok('summarised by the move, not as a bare count',
+       /1 × Other → Racket sports/.test(app.recategoriseSummary(plan).join('')),
+       app.recategoriseSummary(plan).join(''));
+
+    // Re-reading must not touch the id, or the record would duplicate itself.
+    const before = stale.id;
+    const after = app.makeSession({ ...stale, activity: 'racket' });
+    eq('the id is unchanged by the new category, so nothing duplicates',
+       after.id, before);
+
+    // Already correct, or nothing to go on: no work proposed either way.
+    eq('a correctly filed session is left alone',
+       app.recategorisePlan([S({ activity: 'racket' })]).length, 0);
+    eq('and one with no raw name cannot be re-read',
+       app.recategorisePlan([S({ rawActivity: null })]).length, 0);
+
+    // The plan is pure: asking twice proposes the same thing and changes nothing.
+    eq('asking again proposes the same work', app.recategorisePlan([stale]).length, 1);
+    eq('and the record is untouched until it is applied', stale.activity, 'other');
+  });
+}
+
 // --- a metric covering a family of activities ---------------------------------------
 function metricFamilyTests() {
   const S = (over) => app.makeSession({
@@ -1575,6 +1653,8 @@ function insightsTests() {
     targetTests();
     unmeasuredSessionTests();
     metricFamilyTests();
+    activityNamingTests();
+    recategoriseTests();
     await heartRateSpanTests();
     await heartRateWindowTests();
     await zipTests();

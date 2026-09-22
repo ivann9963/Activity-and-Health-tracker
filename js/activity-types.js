@@ -110,7 +110,8 @@ const STRAVA_ACTIVITY_MAP = {
   'swim': 'swimming',
   'weight training': 'strength', 'workout': 'strength', 'crossfit': 'strength',
   'tennis': 'racket', 'squash': 'racket', 'badminton': 'racket', 'table tennis': 'racket',
-  'pickleball': 'racket', 'racquetball': 'racket',
+  'pickleball': 'racket', 'racquetball': 'racket', 'padel': 'racket', 'padel tennis': 'racket',
+  'paddle tennis': 'racket', 'ping pong': 'racket', 'racquetball': 'racket', 'padel': 'racket', 'padel tennis': 'racket',
   'hike': 'hiking',
   'rowing': 'rowing', 'kayaking': 'rowing', 'canoeing': 'rowing',
   'elliptical': 'elliptical',
@@ -127,7 +128,8 @@ const FITBIT_ACTIVITY_MAP = {
   'weights': 'strength', 'workout': 'strength', 'strength training': 'strength',
   'circuit training': 'strength', 'bootcamp': 'strength',
   'tennis': 'racket', 'squash': 'racket', 'badminton': 'racket', 'table tennis': 'racket',
-  'pickleball': 'racket',
+  'pickleball': 'racket', 'racquetball': 'racket', 'padel': 'racket', 'padel tennis': 'racket',
+  'paddle tennis': 'racket', 'ping pong': 'racket',
   'hike': 'hiking',
   'rowing machine': 'rowing',
   'elliptical': 'elliptical',
@@ -135,17 +137,53 @@ const FITBIT_ACTIVITY_MAP = {
   'yoga': 'yoga'
 };
 
+// A last resort for names no table lists. Apple's types are a closed vocabulary, but
+// Fitbit and Strava let a name be very nearly free text — "Padel", "Padel Tennis",
+// "Weight lifting", "Indoor Run" — and a table can only ever list the ones somebody
+// has already hit. Missing one is not cosmetic: it sends the workout to 'other',
+// which belongs to no metric, so the session is stored and visible yet absent from
+// every total. That is how a week of padel came to read as nothing at all.
+//
+// Ordered, because the first match wins and some words appear inside others: "table
+// tennis" must be tested before "tennis", "treadmill" is running rather than walking.
+const ACTIVITY_KEYWORDS = [
+  [/table tennis|ping.?pong/, 'racket'],
+  [/padel|paddle tennis|racquet|racket|tennis|squash|badminton|pickle/, 'racket'],
+  [/treadmill|\brun|jog/, 'running'],
+  [/swim|pool|open.?water/, 'swimming'],
+  [/cycl|bike|biking|spin(ning)?\b/, 'cycling'],
+  [/hike|hiking|trek/, 'hiking'],
+  [/row(ing)?\b|erg\b/, 'rowing'],
+  [/elliptical|cross.?trainer/, 'elliptical'],
+  [/yoga|pilates|stretch/, 'yoga'],
+  [/hiit|interval|tabata|circuit/, 'hiit'],
+  [/weight|strength|lift|gym|resistance|bodyweight|calisthen/, 'strength'],
+  [/walk/, 'walking']
+];
+
+function activityFromKeywords(name) {
+  for (const [re, activity] of ACTIVITY_KEYWORDS) if (re.test(name)) return activity;
+  return null;
+}
+
 // Translate a vendor's activity name into our vocabulary. Always returns a valid key.
 function canonicalActivity(vendor, raw) {
   if (!raw) return 'other';
   if (vendor === 'apple') {
     const bare = String(raw).replace(/^HKWorkoutActivityType/, '');
-    return APPLE_ACTIVITY_MAP[bare] || 'other';
+    // Apple's vocabulary is closed, so an unlisted type is genuinely unknown to us
+    // rather than a spelling we failed to anticipate — but the words in it are still
+    // the best evidence available, and 'other' is a worse answer than a good guess
+    // from the name the vendor chose.
+    return APPLE_ACTIVITY_MAP[bare] ||
+           activityFromKeywords(bare.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()) ||
+           'other';
   }
   const key = String(raw).trim().toLowerCase();
-  if (vendor === 'strava') return STRAVA_ACTIVITY_MAP[key] || 'other';
-  if (vendor === 'fitbit') return FITBIT_ACTIVITY_MAP[key] || 'other';
-  return 'other';
+  const table = vendor === 'strava' ? STRAVA_ACTIVITY_MAP
+              : vendor === 'fitbit' ? FITBIT_ACTIVITY_MAP : null;
+  if (!table) return 'other';
+  return table[key] || activityFromKeywords(key) || 'other';
 }
 
 // Two sessions can only be duplicates of each other if their activities are
@@ -166,6 +204,7 @@ function activitiesCompatible(a, b) {
 
 if (typeof module !== 'undefined') {
   module.exports = { ACTIVITIES, canonicalActivity, activitiesCompatible,
+                     activityFromKeywords,
                      humaniseRawActivity, activityLabel, activityGroupKey,
                      APPLE_ACTIVITY_MAP, STRAVA_ACTIVITY_MAP, FITBIT_ACTIVITY_MAP };
 }

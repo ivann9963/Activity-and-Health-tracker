@@ -11,6 +11,7 @@ function renderDataView(host) {
   return Promise.all([dbGetAll('imports'), getSetting('dedupeSummary', null),
                       loadRecentSessions()])
     .then(([imports, dedupe, recent]) => {
+    const recat = recategorisePlan(recent.sessions);
     imports.sort((a, b) => b.importedAt - a.importedAt);
     host.innerHTML = `
       <div class="view-head">
@@ -31,6 +32,7 @@ function renderDataView(host) {
       </div>
 
       <div id="inspection-result"></div>
+      ${recategoriseHtml(recat)}
       ${recentSessionsHtml(recent.sessions, recent.settings)}
       ${rangeCheckHtml()}
       ${reconciliationHtml(dedupe)}
@@ -40,6 +42,7 @@ function renderDataView(host) {
     wireDropzone();
     wireHistory();
     wireRangeCheck();
+    wireRecategorise(recat);
     if (_inspection) renderInspection(_inspection);
   });
 }
