@@ -118,6 +118,34 @@ function renderSettings(host) {
           </div>
         </div>`;
 
+      const probeBtn = el('google-probe');
+      if (probeBtn) probeBtn.onclick = () => {
+        const out = el('probe-result');
+        probeBtn.disabled = true;
+        out.innerHTML = progressBar(null, 'Asking Google…');
+        probeGoogleHealth((done, total, label) => {
+          out.innerHTML = progressBar((done / total) * 100, `${done} of ${total}: ${label}`);
+        })
+          .then(results => {
+            const text = probeReportText(results);
+            out.innerHTML = `
+              <pre class="scroll">${escHtml(text)}</pre>
+              <div class="card-actions">
+                <button class="btn btn-ghost" id="probe-copy">Copy report</button>
+              </div>`;
+            el('probe-copy').onclick = () => navigator.clipboard.writeText(text)
+              .then(() => showToast('Report copied', 'success'))
+              .catch(() => showToast('Could not copy — select the text instead', 'error'));
+          })
+          .catch(err => {
+            console.error(err);
+            out.innerHTML = `<div class="error-box">
+              <strong>Could not reach Google.</strong>
+              <div class="subtle">${escHtml(err.message)}</div></div>`;
+          })
+          .finally(() => { probeBtn.disabled = false; });
+      };
+
       const connectBtn = el('google-connect');
       if (connectBtn) connectBtn.onclick = connectGoogle;
       const disconnectBtn = el('google-disconnect');
@@ -231,10 +259,15 @@ function googleCardHtml(google) {
     return `<div class="card">
       <h2>Automatic sync</h2>
       <p class="subtle"><span class="yes">✓ Connected to Google Health.</span>
-         New data arrives without exporting anything by hand.</p>
+         Fetching your data is not built yet — the connection is the half that works.</p>
+      <p class="subtle">The probe below asks Google what its API actually returns,
+         read-only, and produces a report. That report is what the importer gets
+         written against, rather than a guess.</p>
       <div class="card-actions">
+        <button class="btn btn-primary" id="google-probe">Test the connection</button>
         <button class="btn btn-ghost" id="google-disconnect">Disconnect</button>
       </div>
+      <div id="probe-result"></div>
     </div>`;
   }
   return `<div class="card">
