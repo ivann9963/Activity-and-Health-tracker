@@ -110,6 +110,12 @@ function main() {
   // mode is a mysteriously missing file, so opt out explicitly.
   fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
 
+  // The Worker reads this to report which commit it is serving. Writing it as an
+  // asset rather than into wrangler.toml keeps the build from dirtying a tracked file
+  // on every run — a build should not leave the repository modified.
+  fs.writeFileSync(path.join(OUT, 'build.json'),
+                   JSON.stringify({ build: id, builtAt: new Date().toISOString() }));
+
   const domain = process.env.CUSTOM_DOMAIN;
   if (domain) fs.writeFileSync(path.join(OUT, 'CNAME'), domain + '\n');
 

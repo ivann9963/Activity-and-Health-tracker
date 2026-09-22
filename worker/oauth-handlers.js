@@ -146,11 +146,16 @@ export async function handleAccessToken(request, env) {
 // "configured: false" alone cannot tell a misspelled name from one added in the wrong
 // section. Reporting the missing NAMES leaks nothing — they are in this file — while
 // turning a dead end into a single obvious fix.
-export function handleStatus(request, env) {
+export async function handleStatus(request, env) {
   const missing = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].filter(name => !env[name]);
   const body = {
     connected: !!readCookie(request, REFRESH_COOKIE),
-    configured: isConfigured(env)
+    configured: isConfigured(env),
+    // Which commit is actually deployed. The page in front of someone can be an older
+    // cached copy while the deployment is current, so "have my changes shipped?" needs
+    // an answer that does not itself come through the cache — and this endpoint is
+    // excluded from caching for exactly that reason.
+    build: await deployedBuild(env)
   };
   if (missing.length) {
     body.missing = missing;
@@ -158,6 +163,18 @@ export function handleStatus(request, env) {
                 'Secrets), not as build variables, then redeploy.';
   }
   return json(body);
+}
+
+// Written by the build alongside the site. Read through the asset binding rather than
+// baked into config, so a build never has to modify a tracked file.
+async function deployedBuild(env) {
+  try {
+    const res = await env.ASSETS.fetch(new Request('https://placeholder/build.json'));
+    if (!res.ok) return 'unknown';
+    return (await res.json()).build || 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 // POST /api/oauth/disconnect — forget the connection, and tell Google to forget it.

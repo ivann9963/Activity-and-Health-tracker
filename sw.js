@@ -38,7 +38,13 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (!isBuilt || req.method !== 'GET') return;
-  if (new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  // API responses are never cached. They report live state — whether the deployment
+  // has its credentials, whether this browser is connected — and a cached answer is
+  // not a stale convenience but a wrong one that outlives the thing it described.
+  if (url.pathname.startsWith('/api/')) return;
 
   // Navigations go to the network first so a deploy is picked up on the next visit,
   // falling back to the cached shell when offline. Everything else is served from
