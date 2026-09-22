@@ -9,11 +9,22 @@
 # Build command in the dashboard:   npm run build
 # Deploy command in the dashboard:  npx wrangler deploy
 #
-# Two secrets must be set on the Worker (Settings → Variables and Secrets, added as
-# "Secret" rather than plaintext):
+# Two values must be set on the Worker, under Settings → Variables and Secrets, each
+# with its type set to "Secret" rather than "Variable":
 #   GOOGLE_CLIENT_ID
 #   GOOGLE_CLIENT_SECRET
-# They are never committed and never reach the browser.
+#
+# The type is load-bearing and gets this wrong once per person. `wrangler deploy`
+# treats this file as the truth for plaintext `vars`: anything added in the dashboard
+# as a Variable, and not declared here, is REMOVED by the next deploy. So a Variable
+# works, survives a while, and then vanishes the next time anything ships — which
+# reads as "Cloudflare keeps losing my config" rather than as what it is. Secrets are
+# stored separately and no deploy touches them.
+#
+# (GOOGLE_CLIENT_ID is not, strictly, a secret — an OAuth client id travels in the
+# authorisation URL and is visible to anyone using the app. It could equally be
+# declared in a `[vars]` block here. It is kept as a Secret so that neither value
+# lives in the repository, and so both are set the same way.)
 
 name = "activity-and-health-tracker"
 main = "worker.js"
