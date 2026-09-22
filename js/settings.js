@@ -60,6 +60,13 @@ function renderSettings(host) {
               <option value="sunday" ${settings.firstDayOfWeek === 'sunday' ? 'selected' : ''}>Sunday</option>
             </select>
           </label>
+          <label class="field">
+            <span>Appearance</span>
+            <select id="set-theme">
+              <option value="dark" ${settings.theme !== 'light' ? 'selected' : ''}>Dark</option>
+              <option value="light" ${settings.theme === 'light' ? 'selected' : ''}>Light</option>
+            </select>
+          </label>
         </div>
 
         ${googleCardHtml(google)}
@@ -194,6 +201,14 @@ function renderSettings(host) {
         .then(() => showToast('Units updated', 'success'));
       el('set-week').onchange = ev => setSetting('firstDayOfWeek', ev.target.value)
         .then(() => showToast('Week start updated', 'success'));
+
+      // Applied to the document immediately rather than on the next boot: a theme
+      // you have to restart to see is one nobody believes they changed.
+      el('set-theme').onchange = ev => {
+        document.documentElement.dataset.theme = ev.target.value;
+        return setSetting('theme', ev.target.value)
+          .then(() => showToast('Appearance updated', 'success'));
+      };
 
       host.querySelectorAll('.metric-toggle').forEach(input => {
         input.onchange = () => {

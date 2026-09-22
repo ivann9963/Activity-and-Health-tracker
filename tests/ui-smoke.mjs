@@ -288,6 +288,23 @@ try {
   check('settings shows the source ranking',
     (await page.locator('.rank-input').count()) >= 5);
 
+  // The light theme was fully specified in CSS but unreachable — the setting existed
+  // and nothing wrote to it. Check both that the control moves the document and that
+  // the light tokens actually resolve to a light surface.
+  await page.locator('#set-theme').selectOption('light');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'light',
+    null, { timeout: 5000 });
+  const lightBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const lightInk = await page.evaluate(() => getComputedStyle(document.body).color);
+  const lum = c => { const [r, g, b] = c.match(/\d+/g).map(Number); return (r + g + b) / 3; };
+  check('the light theme paints a light surface and dark ink',
+    lum(lightBg) > 200 && lum(lightInk) < 80, `${lightBg} / ${lightInk}`);
+  await page.locator('#set-theme').selectOption('dark');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark',
+    null, { timeout: 5000 });
+  const darkBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  check('and dark goes back to a dark one', lum(darkBg) < 40, darkBg);
+
   // Hiding a tile must actually remove it from the dashboard.
   const toggles = page.locator('.metric-toggle');
   check('every metric has a visibility toggle',

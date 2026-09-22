@@ -76,14 +76,49 @@ the others could not:
 tiles eating a phone screen were all invisible to every test and obvious in a
 screenshot.
 
+## Design system
+
+The look is **Untitled UI**. Its React library needs React, Tailwind and a build
+step — none of which this project has — so what is adopted is the token layer, not
+the components. The values in `css/style.css` are transcribed from Untitled UI's own
+theme file, not eyeballed: `npm pack untitledui` and read
+`package/config/v7/styles/theme.css`. Go back to that file before inventing a value.
+
+The stylesheet has two layers and they must not be collapsed:
+
+1. **Ramps** (`--gray-*`, `--brand-*`, `--success-*`, …) — raw scales. Never
+   referenced outside layer 2.
+2. **Semantic** (`--text-primary`, `--bg-primary`, `--border-secondary`, …) — what a
+   colour is *for*. Everything below uses only these, which is why the light theme is
+   a block of reassignments rather than a second stylesheet.
+
+The short aliases at the end of layer 2 (`--bg`, `--surface`, `--text`, `--accent`,
+`--heat-*`) exist because `js/charts.js` writes those names straight into SVG
+attributes. Keep them pointing at semantic tokens so there is one definition of each
+colour rather than two that drift.
+
+Dark is the default and light is the variant — the opposite of Untitled UI's own
+default, because this app is opened at the end of a workout. Both are Untitled UI's
+stated assignments for that mode, not an inversion of the other; the greys step
+differently in each direction. The theme is a saved setting applied in `js/app.js` on
+boot and changed under Settings → Appearance.
+
+No web font is loaded. The stack asks for Inter and falls back to the system face,
+which is what Untitled UI's own stack does — a font file is a request that can fail
+on a phone in a car park.
+
 ## Charts
 
 Single series throughout, so no legends — the heading names what is plotted. Thin
 capped marks, rounded data-end, square baseline, hairline solid gridlines, a tooltip
 on every mark including empty ones. Text never wears the data colour.
 
-The heatmap ramp is validated, not chosen by eye; the first attempt failed with the
-palest step invisible against both surfaces. Light and dark are separate ramps.
+The heatmap ramp is validated, not chosen by eye, with the dataviz skill's
+`scripts/validate_palette.js --ordinal` against each mode's own surface. It has now
+failed the same check twice on first attempt — the palest step invisible against its
+surface — most recently with Untitled UI's `brand-200` at 1.34:1 on white, which is
+why the light ramp starts two steps deeper at `brand-400`. Light and dark are
+separate ramps.
 
 Pace is drawn as an inverted line, because lower is better and bars would make
 improvement look like decline.
