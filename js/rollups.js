@@ -9,6 +9,14 @@
 
 const isCounted = r => !r.supersededBy;
 
+// Which activities a session-backed metric counts. Most cover exactly one; Gym covers
+// a family, because the vendor's label for the same hour varies by app and device.
+function metricActivities(metricId) {
+  const m = METRICS[metricId];
+  if (!m) return [];
+  return m.activities || (m.activity ? [m.activity] : []);
+}
+
 // The pure core: given the records for a range, produce every metric's numbers in a
 // single pass. Kept free of the database so it can be tested directly, and so the
 // dashboard reads each store ONCE instead of once per metric — with seven years of
@@ -21,7 +29,9 @@ function computeRollups(sessions, daily, fromDate, toDate, ids) {
   // Sessions feed the distance/duration metrics, matched on activity.
   const sessionMetrics = wanted.filter(id => METRICS[id].from === 'sessions');
   const byActivity = {};
-  for (const id of sessionMetrics) byActivity[METRICS[id].activity] = id;
+  for (const id of sessionMetrics) {
+    for (const a of metricActivities(id)) byActivity[a] = id;
+  }
 
   // Sessions whose tracked field is missing are counted separately rather than
   // skipped silently. A run with no distance is still a run: a treadmill logs no
@@ -87,8 +97,9 @@ function rollupDaily(metricId, fromDate, toDate) {
   if (metric.from === 'sessions') {
     return dbRange('sessions', 'byDate', fromDate, toDate).then(rows => {
       const out = {};
+      const covered = new Set(metricActivities(metricId));
       for (const s of rows) {
-        if (!isCounted(s) || s.activity !== metric.activity) continue;
+        if (!isCounted(s) || !covered.has(s.activity)) continue;
         const v = s[metric.field];
         if (v == null) continue;
         out[s.localDate] = (out[s.localDate] || 0) + v;

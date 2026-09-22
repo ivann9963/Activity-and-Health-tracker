@@ -31,7 +31,10 @@ const METRICS = {
   },
   time_gym: {
     label: 'Gym', icon: 'strength', kind: 'total', from: 'sessions',
-    activity: 'strength', field: 'durationSec',
+    // A family, not one key. HIIT is done in a gym and has no tile of its own, so
+    // counting only 'strength' left those sessions stored, visible on Insights, and
+    // in no total anywhere — which reads as "you barely trained" to someone who did.
+    activity: 'strength', activities: ['strength', 'hiit'], field: 'durationSec',
     unit: 's', display: 'duration', dayAgg: 'sum', periodAgg: 'sum', goalable: true
   },
   time_racket: {

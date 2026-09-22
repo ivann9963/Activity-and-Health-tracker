@@ -47,6 +47,14 @@ plausible and are wrong.
   the importer credits time to whichever copy of a workout owned the clock, and that
   need not be the copy dedupe keeps, **the winner inherits the fullest band set in its
   group** (`dedupe/sessions.js`); the richest set, never the sum.
+- **A metric may cover a FAMILY of activities, not one key** (`METRICS[id].activities`,
+  read through `metricActivities()`). Gym covers `strength` and `hiit`: Apple calls a
+  circuit `HighIntensityIntervalTraining`, `hiit` has no tile of its own, and counting
+  only `strength` left nine gym sessions in a month totalling 35 minutes — stored,
+  listed on Insights, and in no total anywhere. `other` is deliberately NOT in any
+  family: it is the catch-all, and folding it in would quietly turn dance into gym
+  time. An activity in no family is visible on Insights and on Data → Recent workouts
+  but in no tile, which is the cost of not guessing.
 - **A session whose tracked field is missing is counted, not skipped.** `distance_run`
   reads `distanceM`; a treadmill run records none, and a workout relayed between apps
   often loses it. Dropping it made the dashboard show a dash on a day the user had
@@ -83,6 +91,14 @@ When a total is disputed, **Data → Recent workouts** lists the sessions as sto
 including the copies dedupe set aside and the rows whose figures are incomplete, each
 naming its source. Every other screen aggregates; this is the only one that shows the
 rows, and it is the first place to look when someone says a number is wrong.
+
+**Data → Check a date range** (`js/diagnose.js`) prints the same records through the
+same rules as plain text: every session with its source and dedupe status, totals by
+source and by activity, the daily figures, and every pair of sessions that overlap in
+time without having been merged — each of those is a candidate double count, with the
+rule that kept them apart named. It reports, never acts: merging on suspicion is how a
+real second workout gets erased. It is the right answer to "the totals are off",
+because it is pasteable.
 
 **Look at the rendered app.** Axis ticks reading "0.00 km", a clipped axis, and empty
 tiles eating a phone screen were all invisible to every test and obvious in a

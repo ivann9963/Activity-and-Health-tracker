@@ -66,3 +66,61 @@ function loadRecentSessions() {
     return { sessions: all, settings };
   });
 }
+
+// --- range check --------------------------------------------------------------------
+// "The last couple of weeks are off" is not answerable from a total. This runs the
+// same records through the same rules and prints what it finds, so the discrepancy
+// becomes something anybody can point at.
+
+function rangeCheckHtml() {
+  const to = todayLocal();
+  const from = addDays(to, -13);
+  return `<div class="card">
+    <h2>Check a date range</h2>
+    <p class="subtle">Lists every workout stored between these dates, what each source
+       contributed, and any two sessions that overlap in time without having been
+       merged — each of those is counted twice, which is right if they were two
+       workouts and wrong if one device saw the other's.</p>
+    <label class="field">
+      <span>From</span>
+      <input type="date" id="range-from" class="date-input" value="${from}">
+    </label>
+    <label class="field">
+      <span>To</span>
+      <input type="date" id="range-to" class="date-input" value="${to}">
+    </label>
+    <div class="card-actions">
+      <button class="btn btn-primary btn-small" id="run-range">${icon('target', 16)} Run the check</button>
+      <button class="btn btn-ghost btn-small" id="copy-range" hidden>Copy as text</button>
+    </div>
+    <pre id="range-out" class="scroll" hidden></pre>
+  </div>`;
+}
+
+function wireRangeCheck() {
+  const run = el('run-range');
+  if (!run) return;
+  let lastReport = '';
+
+  run.onclick = () => {
+    const from = el('range-from').value;
+    const to = el('range-to').value;
+    if (!from || !to || from > to) {
+      showToast('Pick a start date on or before the end date', 'error');
+      return;
+    }
+    return Promise.all([dbGetAll('sessions'), dbGetAll('daily'), loadSettings()])
+      .then(([sessions, daily, settings]) => {
+        lastReport = rangeReport(sessions, daily, from, to, settings);
+        const out = el('range-out');
+        out.textContent = lastReport;
+        out.hidden = false;
+        el('copy-range').hidden = false;
+      });
+  };
+
+  const copy = el('copy-range');
+  if (copy) copy.onclick = () => navigator.clipboard.writeText(lastReport)
+    .then(() => showToast('Report copied', 'success'))
+    .catch(() => showToast('Could not copy — check clipboard permissions', 'error'));
+}

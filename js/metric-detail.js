@@ -64,7 +64,8 @@ function detailHtml(id, metric, byDay, allByDay, range, all, sessions, settings,
   const weeks = weekStreaks(byDay, range.from, range.to, id, settings.firstDayOfWeek);
   const allTime = aggregate(Object.values(allByDay), metric.periodAgg);
   const goal = goals[goalId(id, goalPeriod())];
-  const counted = sessions.filter(s => !s.supersededBy && s.activity === metric.activity)
+  const covers = new Set(metricActivities(id));
+  const counted = sessions.filter(s => !s.supersededBy && covers.has(s.activity))
                           .sort((a, b) => b.start - a.start);
 
   return `

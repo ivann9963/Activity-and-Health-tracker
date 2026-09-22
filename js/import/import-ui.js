@@ -32,12 +32,14 @@ function renderDataView(host) {
 
       <div id="inspection-result"></div>
       ${recentSessionsHtml(recent.sessions, recent.settings)}
+      ${rangeCheckHtml()}
       ${reconciliationHtml(dedupe)}
       ${importHistoryHtml(imports)}
       ${exportHelpHtml()}`;
 
     wireDropzone();
     wireHistory();
+    wireRangeCheck();
     if (_inspection) renderInspection(_inspection);
   });
 }

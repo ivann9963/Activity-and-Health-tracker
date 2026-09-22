@@ -1131,6 +1131,51 @@ async function heartRateWindowTests() {
   });
 }
 
+// --- a metric covering a family of activities ---------------------------------------
+function metricFamilyTests() {
+  const S = (over) => app.makeSession({
+    activity: 'strength', localDate: '2026-09-03', tzOffset: 0,
+    start: Date.parse('2026-09-03T18:00:00Z'), end: Date.parse('2026-09-03T19:00:00Z'),
+    durationSec: 3600, distanceM: null,
+    source: { vendor: 'apple', app: 'Apple Health', device: 'iPhone' }, ...over });
+
+  suite('Gym counts the whole strength family', () => {
+    // The bug this exists for: nine gym sessions in a month totalled 35 minutes,
+    // because only sessions mapped exactly to 'strength' were counted. Apple calls a
+    // circuit HighIntensityIntervalTraining, which maps to 'hiit' — a category with
+    // no tile of its own, so those hours were stored, shown on Insights, and counted
+    // in no total anywhere.
+    const day = (d, activity, sec) => S({
+      activity, localDate: `2026-09-0${d}`, durationSec: sec,
+      start: Date.parse(`2026-09-0${d}T18:00:00Z`),
+      end: Date.parse(`2026-09-0${d}T18:00:00Z`) + sec * 1000 });
+
+    const sessions = [day(1, 'strength', 2100), day(2, 'hiit', 3000), day(3, 'hiit', 2700)];
+    const r = app.computeRollups(sessions, [], '2026-09-01', '2026-09-30', ['time_gym']);
+    eq('HIIT counts as gym time', r.time_gym.value, 2100 + 3000 + 2700);
+    eq('and every one of them is an active day', r.time_gym.activeDays, 3);
+
+    // Without the family it would have reported only the one 35-minute session.
+    eq('the old behaviour would have reported just the first',
+       sessions.filter(s => s.activity === 'strength')
+               .reduce((n, s) => n + s.durationSec, 0), 2100);
+
+    // The family must not swallow unrelated sports.
+    const mixed = sessions.concat([day(4, 'running', 1800), day(5, 'racket', 3600)]);
+    const m = app.computeRollups(mixed, [], '2026-09-01', '2026-09-30',
+                                 ['time_gym', 'time_racket', 'distance_run']);
+    eq('racket stays its own metric', m.time_racket.value, 3600);
+    eq('and gym is unchanged by it', m.time_gym.value, 2100 + 3000 + 2700);
+
+    // 'other' is the catch-all and must NOT be folded in, or dance and everything
+    // else unrecognised would silently become gym time.
+    const withOther = sessions.concat([day(6, 'other', 5400)]);
+    eq('an uncategorised session is not quietly counted as gym',
+       app.computeRollups(withOther, [], '2026-09-01', '2026-09-30',
+                          ['time_gym']).time_gym.value, 2100 + 3000 + 2700);
+  });
+}
+
 // --- a session the app cannot measure ------------------------------------------------
 function unmeasuredSessionTests() {
   const base = { activity: 'running', localDate: '2026-09-21', tzOffset: 0,
@@ -1529,6 +1574,7 @@ function insightsTests() {
     insightsTests();
     targetTests();
     unmeasuredSessionTests();
+    metricFamilyTests();
     await heartRateSpanTests();
     await heartRateWindowTests();
     await zipTests();

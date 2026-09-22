@@ -312,6 +312,22 @@ try {
   check('and a row dedupe set aside says so rather than vanishing',
     (await page.locator('.recent-row.is-aside').count()) >= 1);
 
+  // The range check: the only screen that explains a total instead of stating it.
+  await page.locator('#range-from').fill('2019-01-01');
+  await page.locator('#range-to').fill('2026-12-31');
+  await page.locator('#run-range').click();
+  await page.waitForSelector('#range-out:not([hidden])', { timeout: 10000 });
+  const report = await page.locator('#range-out').innerText();
+  check('the range check lists every session with its source',
+    /EVERY SESSION/.test(report) && /Apple Watch|Strava|Fitbit/.test(report),
+    report.slice(0, 300));
+  check('and breaks the range down by source and by activity',
+    /BY SOURCE/.test(report) && /BY ACTIVITY/.test(report));
+  check('and reports sessions that overlap without having been merged',
+    /OVERLAPPING BUT NOT MERGED/.test(report));
+  check('and the daily figures, which come from a different rule',
+    /DAILY FIGURES/.test(report) && /steps/.test(report), report.slice(-400));
+
   check('the Data screen reports what reconciliation did', true);
   await page.locator('button:has-text("Review the decisions")').click();
   await page.waitForSelector('.dup-group', { timeout: 10000 });
