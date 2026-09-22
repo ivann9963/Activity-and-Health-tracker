@@ -60,11 +60,14 @@ function workerImports(workerPath) {
     .map(m => path.posix.normalize(path.posix.join(dir, m[1])));
 }
 
-function copyFile(rel) {
+function copyFile(rel, replacements) {
   const from = path.join(ROOT, rel);
   const to = path.join(OUT, rel);
   fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.copyFileSync(from, to);
+  if (!replacements) { fs.copyFileSync(from, to); return; }
+  let text = fs.readFileSync(from, 'utf8');
+  for (const [find, replace] of replacements) text = text.split(find).join(replace);
+  fs.writeFileSync(to, text);
 }
 
 function main() {
@@ -88,11 +91,15 @@ function main() {
 
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
-  for (const rel of files) copyFile(rel);
+  const id = buildId();
+  for (const rel of files) {
+    // config.js carries the build marker so the running app can say which commit it
+    // is. Everything else is copied byte for byte.
+    copyFile(rel, rel === 'js/config.js' ? [["'__BUILD_ID__'", JSON.stringify(id)]] : null);
+  }
 
   // The service worker is generated rather than copied, so its precache list is
   // always exactly the files above.
-  const id = buildId();
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')
     .replace("'__BUILD_ID__'", JSON.stringify(id))
     .replace("'__PRECACHE__'", JSON.stringify(files.map(f => './' + f), null, 2));

@@ -70,6 +70,14 @@ function renderSettings(host) {
           </table></div>
         </div>
 
+        <div class="card" id="version-card">
+          <h2>Version</h2>
+          <p class="subtle">${escHtml(buildLabel())} · ${metricIds().length} measures ·
+             screens: ${VIEWS.filter(v => v.inNav !== false).map(v => escHtml(v.label)).join(', ')}.
+             A development copy is the files as they are on disk; a numbered build is a
+             deployment.</p>
+        </div>
+
         <div class="card">
           <h2>Backup</h2>
           <p class="subtle">Everything lives in this browser alone. Clearing site data,

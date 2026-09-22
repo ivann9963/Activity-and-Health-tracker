@@ -5,8 +5,17 @@
 const APP = {
   name: 'Activity Ledger',
   dbName: 'activity-ledger',
-  dbVersion: 1
+  dbVersion: 1,
+  // Replaced by tools/build.js with the commit being deployed. Left as the literal
+  // placeholder in a source checkout, which is how the app knows to call itself a
+  // development copy — and how you can tell at a glance whether the thing in front of
+  // you is the deployed build or the files you just edited.
+  build: '__BUILD_ID__'
 };
+
+function buildLabel() {
+  return APP.build === '__BUILD' + '_ID__' ? 'development copy' : 'build ' + APP.build;
+}
 
 // Every source of data we can ingest. `vendor` is the stable key written onto each
 // record's source object; the label is what the UI shows.

@@ -275,6 +275,16 @@ try {
   await page.keyboard.press('Escape');
   check('and Escape closes it', (await page.locator('.dialog').count()) === 0);
 
+  // The version line is how someone tells a stale checkout from a current one, so it
+  // has to be right in both directions: a source copy must not claim to be a build,
+  // and a build must not claim to be a source copy.
+  const version = await page.locator('#version-card').innerText();
+  check(AGAINST_BUILD ? 'a build names its commit' : 'a source copy says it is one',
+    AGAINST_BUILD ? /build [0-9a-f]{6,}/.test(version) : /development copy/.test(version),
+    version.slice(0, 160));
+  check('and it lists the screens so a stale copy is obvious',
+    /Insights/.test(version) && /Year/.test(version), version.slice(0, 160));
+
   const skip = await page.locator('.skip-link').count();
   check('there is a skip link for keyboard users', skip === 1);
 
