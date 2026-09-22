@@ -119,15 +119,20 @@ function timeByActivity(sessions, opts) {
 // --- effort per sport ----------------------------------------------------------------
 // Weighted by duration, not a mean of means: a 10-minute warm-up and a two-hour ride
 // should not count equally toward an average heart rate.
-function avgHrByActivity(sessions) {
+function avgHrByActivity(sessions, opts) {
+  const o = opts || {};
   const acc = new Map();
 
   for (const s of sessions) {
     if (!counted(s) || !s.avgHr || !s.durationSec) continue;
-    const key = activityGroupKey(s.activity, s.rawActivity);
+    // Same key and same exclusions as every other card, so one screen does not
+    // contradict another.
+    if (isExcluded(s, o.exclude)) continue;
+    const key = sessionKey(s);
+    const named = activityLabel(s.activity, s.rawActivity);
     const a = acc.get(key) ||
       { weighted: 0, seconds: 0, count: 0, max: 0,
-        label: activityLabel(s.activity, s.rawActivity) };
+        label: key === 'unlabelled' ? `Uncategorised · ${sourceLabel(s.source)}` : named };
     a.weighted += s.avgHr * s.durationSec;
     a.seconds += s.durationSec;
     a.count++;
@@ -139,7 +144,7 @@ function avgHrByActivity(sessions) {
     .map(([activity, a]) => ({
       activity,
       label: a.label,
-      icon: (ACTIVITIES[activity] || {}).icon || '💪',
+      icon: activity === 'unlabelled' ? '❓' : ((ACTIVITIES[activity] || {}).icon || '💪'),
       avgHr: Math.round(a.weighted / a.seconds),
       highestSessionAvg: a.max,
       sessions: a.count,

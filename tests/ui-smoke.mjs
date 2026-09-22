@@ -175,6 +175,11 @@ try {
   check('effort by sport reports a weighted average',
     /effort by sport/i.test(insights2) && /bpm/.test(insights2), insights2.slice(0, 900));
   check('the period can be switched', (await page.locator('[data-insight]').count()) === 3);
+  // A four-column table used to run off the side of a 390px screen, hiding the column
+  // it was cut off at. Nothing on a phone screen may scroll sideways.
+  check('nothing on the insights screen runs off the side of the phone',
+    !(await page.evaluate(() =>
+      document.documentElement.scrollWidth > document.documentElement.clientWidth)));
 
   // Heart-rate bands live in 2024 in the fixture, so stepping back a year is also a
   // check that the period navigation actually moves the data.

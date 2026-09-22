@@ -504,3 +504,26 @@ a.metric-tile:hover { border-color: var(--accent); }
 }
 .chip-toggle:hover { color: var(--text); border-color: var(--text-dim); }
 .chip-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* --- effort by sport --------------------------------------------------------------- */
+/* Four numeric columns do not fit 390px, and a table that scrolls sideways inside a
+   card hides the column it was cut off at. One row per sport instead: the average is
+   the answer, the rest is context underneath it. */
+.effort-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "icon name  value"
+    ".    note  note";
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.effort-row:last-of-type { border-bottom: 0; }
+
+.effort-icon  { grid-area: icon; }
+.effort-name  { grid-area: name; font-weight: 600; }
+.effort-value { grid-area: value; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.effort-unit  { font-size: 13px; font-weight: 500; color: var(--text-dim); }
+.effort-note  { grid-area: note; font-size: 13px; color: var(--text-dim); margin-top: 2px; }

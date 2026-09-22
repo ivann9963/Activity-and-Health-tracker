@@ -47,7 +47,7 @@ function insightsHtml(sessions, paceSessions, range, settings) {
   const notWorkouts = settings.notWorkouts || [];
   const share = timeByActivity(sessions, { exclude: notWorkouts });
   const days = activeDays(sessions, range.from, range.to, notWorkouts);
-  const hr = avgHrByActivity(sessions);
+  const hr = avgHrByActivity(sessions, { exclude: notWorkouts });
   // Same exclusion list as the share: an activity set aside leaves the bands too.
   const bands = hrBandTotals(sessions, { exclude: notWorkouts });
   const totalSeconds = share.reduce((n, s) => n + s.seconds, 0);
@@ -204,16 +204,14 @@ function hrByActivityCardHtml(hr) {
   if (!hr.length) return '';
   return `<div class="card">
     <h2>Effort by sport</h2>
-    <div class="table-wrap"><table class="data-table">
-      <thead><tr><th>Sport</th><th class="num">Average</th><th class="num">Hardest session</th>
-        <th class="num">Sessions</th></tr></thead>
-      <tbody>${hr.map(h => `<tr>
-        <td>${h.icon} ${escHtml(h.label)}</td>
-        <td class="num">${h.avgHr} bpm</td>
-        <td class="num">${h.highestSessionAvg} bpm</td>
-        <td class="num">${h.sessions}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>
+    ${hr.map(h => `
+      <div class="effort-row">
+        <span class="effort-icon" aria-hidden="true">${h.icon}</span>
+        <span class="effort-name">${escHtml(h.label)}</span>
+        <span class="effort-value">${h.avgHr}<span class="effort-unit"> bpm</span></span>
+        <span class="effort-note">hardest ${h.highestSessionAvg} bpm ·
+          ${h.sessions} session${h.sessions === 1 ? '' : 's'}</span>
+      </div>`).join('')}
     <details class="why"><summary>How this is averaged</summary>
       <p class="subtle">Weighted by session length, so a ten-minute warm-up does not
          count as much as a two-hour ride.</p></details>

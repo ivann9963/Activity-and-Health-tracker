@@ -1209,6 +1209,34 @@ function insightsTests() {
        app.activeDays([dance], '2026-03-01', '2026-03-03', []).active, 1);
   });
 
+  suite('effort by sport agrees with the rest of the screen', () => {
+    const dance = S({ activity: 'other', rawActivity: 'HKWorkoutActivityTypeCardioDance',
+                      durationSec: 3600, avgHr: 130 });
+    const bare = S({ activity: 'other', rawActivity: null, durationSec: 1800, avgHr: 120,
+                     source: { vendor: 'fitbit', app: 'Google Health', device: 'Fitbit' } });
+    const run = S({ durationSec: 1800, avgHr: 155 });
+
+    const rows = app.avgHrByActivity([dance, bare, run]);
+    ok('nothing is called "Unlabelled" on screen',
+       !rows.some(r => /unlabelled/i.test(r.label)), JSON.stringify(rows.map(r => r.label)));
+    ok('an uncategorised workout names the device that logged it',
+       rows.some(r => /Uncategorised · Fitbit/.test(r.label)));
+    ok('and an unmapped sport uses its own name',
+       rows.some(r => r.label === 'Dance'));
+
+    const key = app.sessionKey(dance);
+    const kept = app.avgHrByActivity([dance, bare, run], { exclude: [key] });
+    ok('an activity set aside leaves this card too',
+       !kept.some(r => r.label === 'Dance'));
+
+    // Weighted by duration, which is the whole point of the card.
+    const mixed = app.avgHrByActivity([
+      S({ durationSec: 3600, avgHr: 150 }),
+      S({ durationSec: 600, avgHr: 100 })
+    ]);
+    eq('the average is weighted by time, not a mean of means', mixed[0].avgHr, 143);
+  });
+
   suite('heart-rate bands follow the same exclusions', () => {
     // The inconsistency this closes: time by heart rate was a daily figure, so an
     // activity set aside vanished from every card except that one, which went on
