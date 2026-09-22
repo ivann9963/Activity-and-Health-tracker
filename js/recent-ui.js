@@ -20,12 +20,17 @@ function recentSessionsHtml(sessions, settings) {
 
   const excluded = settings.notWorkouts || [];
   const rows = sessions.slice(0, RECENT_LIMIT);
+  const unnamed = unnamedSessions(rows);
 
   return `<div class="card">
     <h2>Recent workouts</h2>
     <p class="subtle">The last ${rows.length} as stored, newest first — including
        copies dedupe set aside. If something you did is missing here, it was not in
        the file; if it is here but not in a total, this row says why.</p>
+    ${unnamed.length ? `<p class="subtle">${plural(unnamed.length, 'workout')} could not be
+       named from the file — Strava writes a sport Apple Health has no type for as
+       "Other", so the word is not in there to read. Say what they were and they join
+       their totals; the answer is kept against the workout and survives re-importing.</p>` : ''}
     ${rows.map(s => {
       const label = activityLabel(s.activity, s.rawActivity);
       const aside = !!s.supersededBy;
@@ -46,6 +51,10 @@ function recentSessionsHtml(sessions, settings) {
         notes.push('no distance recorded');
       }
 
+      // The app could not name it and never will: Strava writes a sport Apple has no
+      // type for as "Other", and the word is simply not in the file. Ask.
+      const unnamed = !aside && label === 'Unlabelled';
+
       return `<div class="recent-row ${aside ? 'is-aside' : ''}">
         <span class="recent-icon">${iconOrText((ACTIVITIES[s.activity] || {}).icon || 'other', 18)}</span>
         <span class="recent-date">${escHtml(s.localDate)}</span>
@@ -53,6 +62,13 @@ function recentSessionsHtml(sessions, settings) {
         <span class="recent-facts">${escHtml(facts.join(' · ') || 'no figures')}</span>
         <span class="recent-source">${escHtml(sourceLabel(s.source))}</span>
         ${notes.length ? `<span class="recent-note">${escHtml(notes.join(' · '))}</span>` : ''}
+        ${unnamed ? `<span class="recent-label-it">
+          <label class="visually-hidden" for="lbl-${escHtml(s.id)}">What was this workout?</label>
+          <select class="label-select" id="lbl-${escHtml(s.id)}" data-label-session="${escHtml(s.id)}">
+            <option value="">What was this?</option>
+            ${Object.keys(ACTIVITIES).filter(k => k !== 'other').map(k =>
+              `<option value="${k}">${escHtml(ACTIVITIES[k].label)}</option>`).join('')}
+          </select></span>` : ''}
       </div>`;
     }).join('')}
   </div>`;
@@ -160,4 +176,26 @@ function wireRangeCheck() {
   if (copy) copy.onclick = () => navigator.clipboard.writeText(lastReport)
     .then(() => showToast('Report copied', 'success'))
     .catch(() => showToast('Could not copy — check clipboard permissions', 'error'));
+}
+
+function wireLabelling(sessions) {
+  const byId = {};
+  for (const s of sessions) byId[s.id] = s;
+  document.querySelectorAll('[data-label-session]').forEach(sel => {
+    sel.onchange = () => {
+      const id = sel.dataset.labelSession;
+      const activity = sel.value;
+      if (!activity) return;
+      sel.disabled = true;
+      return setManualActivity(id, activity)
+        .then(() => {
+          showToast(`Filed as ${(ACTIVITIES[activity] || {}).label || activity}`, 'success');
+          refreshView();
+        })
+        .catch(err => {
+          sel.disabled = false;
+          showToast('Could not save that: ' + err.message, 'error');
+        });
+    };
+  });
 }

@@ -9,9 +9,11 @@ let _busy = false;
 
 function renderDataView(host) {
   return Promise.all([dbGetAll('imports'), getSetting('dedupeSummary', null),
-                      loadRecentSessions()])
-    .then(([imports, dedupe, recent]) => {
-    const recat = recategorisePlan(recent.sessions);
+                      loadRecentSessions(), dbGetAll('overrides')])
+    .then(([imports, dedupe, recent, overrideRows]) => {
+    const overrides = {};
+    for (const o of overrideRows) overrides[o.id] = o;
+    const recat = recategorisePlan(recent.sessions, overrides);
     imports.sort((a, b) => b.importedAt - a.importedAt);
     host.innerHTML = `
       <div class="view-head">
@@ -43,6 +45,7 @@ function renderDataView(host) {
     wireHistory();
     wireRangeCheck();
     wireRecategorise(recat);
+    wireLabelling(recent.sessions);
     if (_inspection) renderInspection(_inspection);
   });
 }

@@ -1209,6 +1209,63 @@ function recategoriseTests() {
   });
 }
 
+// --- naming a workout the file cannot name ------------------------------------------
+function manualLabelTests() {
+  const S = (over) => app.makeSession({
+    activity: 'other', rawActivity: 'HKWorkoutActivityTypeOther',
+    localDate: '2026-09-16', tzOffset: 0,
+    start: Date.parse('2026-09-16T18:00:00Z'), end: Date.parse('2026-09-16T19:30:00Z'),
+    durationSec: 5400,
+    source: { vendor: 'apple', app: 'Strava', device: null }, ...over });
+
+  suite('a workout the file cannot name can be named by hand', () => {
+    // Strava writes a sport Apple has no type for as HKWorkoutActivityTypeOther. The
+    // word "padel" is simply not in the export, so no parser will ever recover it —
+    // nine such sessions were a third of one September and counted nowhere.
+    const s = S();
+    eq('the app admits it cannot name it',
+       app.activityLabel(s.activity, s.rawActivity), 'Unlabelled');
+    eq('and offers it up to be named', app.unnamedSessions([s]).length, 1);
+    eq('a session the vendor did name is not offered',
+       app.unnamedSessions([S({ activity: 'running', rawActivity: 'HKWorkoutActivityTypeRunning' })]).length, 0);
+    // makeSession always builds a fresh record, so set this the way dedupe does.
+    const loser = S();
+    loser.supersededBy = 'some-winner';
+    eq('nor is one dedupe already set aside', app.unnamedSessions([loser]).length, 0);
+
+    // The answer is stored against the deterministic id, so re-importing the very
+    // file it describes cannot erase it — the record is rewritten, the override is not.
+    const overrides = { [s.id]: { id: s.id, activity: 'racket' } };
+    const changed = app.applyActivityOverrides([s], overrides);
+    eq('the label is reapplied to the record', changed.length, 1);
+    eq('and the record now reads as that sport', s.activity, 'racket');
+
+    // Reapplying is idempotent, which is what makes it safe to run after every import.
+    eq('applying it again changes nothing',
+       app.applyActivityOverrides([s], overrides).length, 0);
+
+    // An override carrying only a label must not be read as a dedupe decision.
+    eq('a label alone does not suppress the record',
+       app.applyOverride(overrides, s, null), null);
+    eq('nor does it rescue one the rules suppressed',
+       app.applyOverride(overrides, s, 'winner-id'), 'winner-id');
+    // Whereas a real decision still works.
+    eq('a keep decision still overrides the rules',
+       app.applyOverride({ [s.id]: { decision: 'keep' } }, s, 'winner-id'), null);
+
+    // A hand-written answer outranks any mapping, now or later. Without the
+    // override this session would be re-read from 'Padel' to racket; with it, the
+    // person has already spoken and the pass leaves it alone.
+    const fitbitPadel = S({ rawActivity: 'Padel', activity: 'other',
+                            source: { vendor: 'fitbit', app: 'Google Health' } });
+    eq('without an answer, re-reading would refile it',
+       app.recategorisePlan([fitbitPadel], {}).length, 1);
+    eq('re-reading never overwrites what a person said',
+       app.recategorisePlan([fitbitPadel],
+                            { [fitbitPadel.id]: { activity: 'swimming' } }).length, 0);
+  });
+}
+
 // --- a metric covering a family of activities ---------------------------------------
 function metricFamilyTests() {
   const S = (over) => app.makeSession({
@@ -1655,6 +1712,7 @@ function insightsTests() {
     metricFamilyTests();
     activityNamingTests();
     recategoriseTests();
+    manualLabelTests();
     await heartRateSpanTests();
     await heartRateWindowTests();
     await zipTests();

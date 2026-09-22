@@ -82,7 +82,8 @@ function loadApp() {
       parseFitbitWeight, parseFitbitHeartRate, createFitbitCollector, DailyBuckets,
       inspectFile, inspectionReportText,
       // dedupe + rollups (present from phase 3 onward)
-      dedupeSessions, applySessionDecisions,
+      dedupeSessions, applySessionDecisions, applyOverride,
+      unnamedSessions, applyActivityOverrides,
       electDailySources, applyDailyDecisions,
       sessionsOverlap, overlapRatio, sourceRank, pickWinner, richness,
       PARTIAL_WEAR_RATIO,

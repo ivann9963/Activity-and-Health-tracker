@@ -69,7 +69,8 @@ function overrideFor(overrides, id) { return overrides && overrides[id]; }
 
 function applyOverride(overrides, rec, computedSupersededBy) {
   const o = overrideFor(overrides, rec.id);
-  if (!o) return computedSupersededBy;
+  // A row carrying only a manual label says nothing about duplication.
+  if (!o || !o.decision) return computedSupersededBy;
   if (o.decision === 'keep') return null;
   if (o.decision === 'suppress') return o.winner || 'manual';
   return computedSupersededBy;

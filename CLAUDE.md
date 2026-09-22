@@ -55,6 +55,16 @@ plausible and are wrong.
   table first), and the order is load-bearing: "table tennis" before "tennis",
   "treadmill" as running rather than walking. A name with nothing to go on still
   returns `other`; the fallback guesses from evidence, never from nothing.
+- **Some workouts cannot be named from the file at all, and a person must be asked.**
+  Strava writes a sport Apple Health has no type for as `HKWorkoutActivityTypeOther`,
+  so the word is not in the export and no parser will recover it — one real September
+  had nine such sessions, 6h 35m, a third of the month, counted nowhere. The answer is
+  stored in `overrides` keyed by the session id, the same place and for the same
+  reason as a manual dedupe decision: **a re-import rewrites every session record**, so
+  an answer written onto the record would be erased by re-importing the very file it
+  describes. `runDedupe` reapplies labels BEFORE grouping, because what a session is
+  decides what it can be a duplicate of. An override row carrying only `activity` must
+  never be read as a dedupe decision (`applyOverride` checks for `decision` first).
 - **Improving the mapping does nothing for data already imported**, because `activity`
   is derived at import and stored. `js/recategorise.js` re-runs the decision over
   stored sessions using their kept `rawActivity` and re-runs dedupe after, since

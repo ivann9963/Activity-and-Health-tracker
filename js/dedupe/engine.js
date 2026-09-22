@@ -17,7 +17,11 @@ function runDedupe() {
     const overrides = {};
     for (const o of overrideRows) overrides[o.id] = o;
 
+    // A manual label is reapplied before grouping, not after: what a session IS
+    // decides what it can be a duplicate of.
+    const relabelled = applyActivityOverrides(sessions, overrides);
     const sessionChanges = applySessionDecisions(dedupeSessions(sessions, settings, overrides));
+    for (const r of relabelled) if (!sessionChanges.includes(r)) sessionChanges.push(r);
     const dailyChanges = applyDailyDecisions(electDailySources(daily, settings, overrides));
 
     const summary = {

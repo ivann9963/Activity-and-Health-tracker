@@ -1019,3 +1019,22 @@ a.metric-tile:active { transform: scale(.99); }
 
 .recat-list { margin: 10px 0 0; padding-left: 20px; font-size: 14px; line-height: 22px;
               color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+/* The app could not name these and never will; the person can. The control sits on
+   the row it corrects rather than on a screen of its own. */
+.recent-row { grid-template-areas:
+    "icon date  name   source"
+    ".    facts facts  facts"
+    ".    note  note   note"
+    ".    label label  label"; }
+.recent-label-it { grid-area: label; margin-top: 6px; }
+.label-select {
+  background: var(--bg-secondary); color: var(--text-secondary);
+  border: 1px dashed var(--border-primary); border-radius: var(--radius-md);
+  padding: 6px 10px; font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.label-select:hover { color: var(--text-primary); border-style: solid; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
