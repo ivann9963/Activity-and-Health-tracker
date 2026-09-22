@@ -29,7 +29,7 @@ function renderReview(host) {
           <button class="btn-link back-link" onclick="navigate('data')">‹ Data</button>
           <div class="view-head"><h1>Duplicates</h1></div>
           <div class="card empty-state">
-            <div class="empty-icon" aria-hidden="true">✨</div>
+            <div class="empty-icon">${icon('check', 40)}</div>
             <h2>Nothing overlapping</h2>
             <p>No two sources have recorded the same workout or the same day.
                Once you import a second source there will be decisions here to review.</p>
@@ -112,7 +112,7 @@ function sessionRowHtml(s, ids) {
   if (s.avgHr) bits.push(s.avgHr + ' bpm');
   if (s.energyKcal) bits.push(Math.round(s.energyKcal) + ' kcal');
   return `<div class="dup-row ${counted ? 'counted' : 'set-aside'}">
-    <div class="dup-mark" aria-hidden="true">${counted ? '✓' : '○'}</div>
+    <div class="dup-mark">${counted ? icon('check', 16) : icon('close', 16)}</div>
     <div class="dup-body">
       <div class="dup-source">${escHtml(sourceLabel(s.source))}
         <span class="subtle">${escHtml(new Date(s.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</span>
@@ -147,7 +147,7 @@ function dailyGroupsHtml(groups, overrides) {
       ${countedFirst(g.items).map(d => {
         const counted = !d.supersededBy;
         return `<div class="dup-row ${counted ? 'counted' : 'set-aside'}">
-          <div class="dup-mark" aria-hidden="true">${counted ? '✓' : '○'}</div>
+          <div class="dup-mark">${counted ? icon('check', 16) : icon('close', 16)}</div>
           <div class="dup-body">
             <div class="dup-source">${escHtml(sourceLabel(d.source))}
               <strong class="dup-value">${escHtml(formatMetric(metricId, d.value))}</strong></div>
@@ -192,5 +192,5 @@ function wireReviewActions() {
 // Reconciliation is plumbing, not a headline feature — it earns a permanent tab about
 // as much as a database migration would. It lives one tap deep, reached from the Data
 // screen, which is where questions about data quality actually arise.
-registerView({ id: 'duplicates', label: 'Duplicates', icon: '🔀',
+registerView({ id: 'duplicates', label: 'Duplicates', icon: 'refresh',
                inNav: false, render: renderReview });

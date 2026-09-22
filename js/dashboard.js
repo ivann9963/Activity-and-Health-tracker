@@ -98,12 +98,12 @@ function metricTileHtml(id, current, previous, bounds, goals, settings) {
   const empty = value == null || value === 0;
   const goal = goals && goals[goalId(id, _period)];
 
-  return `<a class="metric-tile ${empty ? 'is-empty' : ''}" href="#/metric/${id}">
+  return `<a class="metric-tile ${empty ? 'is-empty' : 'has-data'}" href="#/metric/${id}">
     <div class="metric-head">
-      <span class="metric-icon" aria-hidden="true">${metric.icon}</span>
+      <span class="metric-icon">${iconOrText(metric.icon)}</span>
       <span class="metric-name">${escHtml(metric.label)}</span>
     </div>
-    <div class="metric-value">${escHtml(formatMetric(id, value))}</div>
+    <div class="metric-value"${empty ? '' : ' data-count'}>${escHtml(formatMetric(id, value))}</div>
     ${empty ? '' : deltaHtml(id, value, prevValue) + barsHtml(id, current && current.byDay, bounds)}
     ${goal ? goalMeterHtml(id, goal.target, value, bounds) : ''}
     ${!goal && metric.kind === 'total' && current && current.activeDays
@@ -199,7 +199,7 @@ function allTimeHtml(allTime, bounds, shown) {
       years >= 1 ? ` — ${years.toFixed(1)} years` : ''}.</p>
     <div class="stat-row">
       ${totals.map(t => `<div class="stat-tile">
-        <div class="stat-label">${METRICS[t.id].icon} ${escHtml(METRICS[t.id].label)}</div>
+        <div class="stat-label">${iconOrText(METRICS[t.id].icon, 14)} ${escHtml(METRICS[t.id].label)}</div>
         <div class="stat-value">${escHtml(formatMetric(t.id, t.value))}</div>
       </div>`).join('')}
     </div>
@@ -213,7 +213,7 @@ function renderEmptyState(host) {
       <p class="subtle">Bring in an export and this becomes your ledger.</p>
     </div>
     <div class="card empty-state">
-      <div class="empty-icon" aria-hidden="true">🏃</div>
+      <div class="empty-icon">${icon('running', 40)}</div>
       <h2>Start with your Apple Health export</h2>
       <p>It holds the deepest history — every run, swim, gym session and step your phone
          and watch have recorded. Drop it in and you will see exactly what is inside
@@ -222,4 +222,4 @@ function renderEmptyState(host) {
     </div>`;
 }
 
-registerView({ id: 'home', label: 'Home', icon: '🏠', render: renderDashboard });
+registerView({ id: 'home', label: 'Home', icon: 'home', render: renderDashboard });

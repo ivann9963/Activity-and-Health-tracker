@@ -42,7 +42,7 @@ function renderYearReview(host) {
 function emptyReviewHtml() {
   return `<div class="view-head"><h1>Year in review</h1></div>
     <div class="card empty-state">
-      <div class="empty-icon" aria-hidden="true">📅</div>
+      <div class="empty-icon">${icon('calendar', 40)}</div>
       <h2>Nothing to review yet</h2>
       <p>Import a year of history and this becomes the page worth coming back to
          every December.</p>
@@ -104,12 +104,12 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
 
     ${share.length ? `<div class="card">
       <h2>Where the time went</h2>
-      <p class="headline">Most of it went on ${share[0].icon}
+      <p class="headline">Most of it went on ${iconOrText(share[0].icon, 16)}
         <strong>${escHtml(share[0].label)}</strong> — ${Math.round(share[0].pct)}% of
         ${escHtml(formatMetric('time_gym', shareTotal))}.</p>
       ${share.map(a => `
         <div class="share-row">
-          <span class="share-label">${a.icon} ${escHtml(a.label)}</span>
+          <span class="share-label">${iconOrText(a.icon, 16)} ${escHtml(a.label)}</span>
           <span class="share-value">${escHtml(formatMetric('time_gym', a.seconds))}
             <span class="share-pct">${Math.round(a.pct)}%</span></span>
           <div class="share-track"><div class="share-fill"
@@ -130,7 +130,7 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
         <span>Showing</span>
         <select id="heat-metric">
           ${shown.filter(id => METRICS[id].kind === 'total').map(id =>
-            `<option value="${id}">${METRICS[id].icon} ${escHtml(METRICS[id].label)}</option>`).join('')}
+            `<option value="${id}">${escHtml(METRICS[id].label)}</option>`).join('')}
         </select>
       </div>
       <div class="chart-wrap" id="heatmap-host"></div>
@@ -160,7 +160,7 @@ function totalCardHtml(metricId, current, previous, year) {
 
   return `<div class="card total-card">
     <div class="metric-head">
-      <span class="metric-icon" aria-hidden="true">${metric.icon}</span>
+      <span class="metric-icon">${iconOrText(metric.icon)}</span>
       <span class="metric-name">${escHtml(metric.label)}</span>
     </div>
     <div class="total-value">${escHtml(formatMetric(metricId, value))}</div>
@@ -210,7 +210,7 @@ function trendCardHtml(shown, current, previous, year) {
         const first = days.length ? current[id].byDay[days[0]] : null;
         const last = days.length ? current[id].byDay[days[days.length - 1]] : null;
         return `<tr>
-          <td>${METRICS[id].icon} ${escHtml(METRICS[id].label)}</td>
+          <td>${iconOrText(METRICS[id].icon, 15)} ${escHtml(METRICS[id].label)}</td>
           <td class="num">${escHtml(formatMetric(id, current[id].value))}</td>
           <td class="num">${escHtml(formatMetric(id, first))}</td>
           <td class="num">${escHtml(formatMetric(id, last))}</td>
@@ -278,4 +278,4 @@ function wireReview(firstYear, lastYear) {
   if (next) next.onclick = () => { _reviewYear = shown + 1; refreshView(); };
 }
 
-registerView({ id: 'year', label: 'Year', icon: '🏆', render: renderYearReview });
+registerView({ id: 'year', label: 'Year', icon: 'year', render: renderYearReview });

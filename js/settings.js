@@ -79,7 +79,7 @@ function renderSettings(host) {
             const hidden = (settings.hiddenMetrics || []).indexOf(id) !== -1;
             const has = withData.has(id);
             return `<label class="field toggle-field">
-              <span>${METRICS[id].icon} ${escHtml(METRICS[id].label)}
+              <span>${iconOrText(METRICS[id].icon, 16)} ${escHtml(METRICS[id].label)}
                 ${has ? '' : '<span class="pill">no data</span>'}</span>
               <input type="checkbox" class="metric-toggle" data-metric="${id}"
                      ${hidden ? '' : 'checked'}>
@@ -96,7 +96,7 @@ function renderSettings(host) {
           ${groups.concat(rest).map(g => {
             const off = (settings.notWorkouts || []).indexOf(g.key) !== -1;
             return `<label class="field toggle-field">
-              <span>${g.icon} ${escHtml(g.label)}
+              <span>${iconOrText(g.icon, 16)} ${escHtml(g.label)}
                 ${g.sessions ? `<span class="pill">${formatMetric('time_gym', g.seconds)}</span>`
                              : '<span class="pill">no data</span>'}</span>
               <input type="checkbox" class="workout-toggle" data-activity="${escHtml(g.key)}"
@@ -317,7 +317,7 @@ function googleCardHtml(google) {
   if (google.connected) {
     return `<div class="card">
       <h2>Automatic sync</h2>
-      <p class="subtle"><span class="yes">✓ Connected to Google Health.</span>
+      <p class="subtle"><span class="yes">${icon('check', 15)} Connected to Google Health.</span>
          Fetching your data is not built yet — the connection is the half that works.</p>
       <p class="subtle">The probe below asks Google what its API actually returns,
          read-only, and produces a report. That report is what the importer gets
@@ -340,4 +340,4 @@ function googleCardHtml(google) {
   </div>`;
 }
 
-registerView({ id: 'settings', label: 'Settings', icon: '⚙️', render: renderSettings });
+registerView({ id: 'settings', label: 'Settings', icon: 'settings', render: renderSettings });

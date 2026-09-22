@@ -20,7 +20,7 @@ function renderDataView(host) {
       <div class="card">
         <div id="dropzone" class="dropzone" tabindex="0" role="button"
              aria-label="Choose or drop an export file">
-          <div class="dropzone-icon" aria-hidden="true">📥</div>
+          <div class="dropzone-icon">${icon('upload', 36)}</div>
           <div class="dropzone-title">Drop an export here</div>
           <div class="dropzone-sub">or click to choose a file</div>
           <input type="file" id="file-input" hidden
@@ -174,7 +174,7 @@ function renderInspection(rep) {
             ${t.sample ? sampleHtml(t.sample) : ''}</td>
           <td class="num">${humanCount(t.count)}</td>
           <td class="subtle nowrap">${escHtml(t.from || '?')} → ${escHtml(t.to || '?')}</td>
-          <td>${t.mapped ? `<span class="yes">✓ ${escHtml(t.mapped)}</span>` : '<span class="no">—</span>'}</td>
+          <td>${t.mapped ? `<span class="yes">${icon('check', 14)} ${escHtml(t.mapped)}</span>` : '<span class="no">—</span>'}</td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>`;
@@ -366,4 +366,4 @@ function exportHelpHtml() {
   </div>`;
 }
 
-registerView({ id: 'data', label: 'Data', icon: '📥', render: renderDataView });
+registerView({ id: 'data', label: 'Data', icon: 'data', render: renderDataView });

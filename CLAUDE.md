@@ -107,6 +107,49 @@ No web font is loaded. The stack asks for Inter and falls back to the system fac
 which is what Untitled UI's own stack does — a font file is a request that can fail
 on a phone in a car park.
 
+## Icons
+
+`js/icons.js` is the only source of glyphs. Records carry an icon **name**
+(`icon: 'running'`), never a character, and views render it through `icon(name, size)`
+or `iconOrText(...)` — the latter passes an unknown string through so a stray value
+degrades instead of throwing.
+
+Interface icons are Untitled UI's own, lifted from `@untitledui/icons`
+(`npm pack @untitledui/icons`, then read the `d` out of `dist/<Name>.mjs`). Untitled UI
+ships no sport glyphs, so those are hand-authored to the same spec: 24×24 box, 2px
+stroke, round caps and joins, no fill, `currentColor`. `ICON_PATHS` holds raw SVG
+children, so an icon may use `<circle>` or `<ellipse>` where a path would be clumsy.
+
+These replaced emoji. Emoji render differently on every platform, cannot take a
+colour, and are the loudest possible signal that nobody chose them.
+
+**Judge a new icon at 20px, not at 200.** Render the contact sheet — every icon in a
+grid at its real size — before believing one works. Doing that caught a racket that
+read as a no-entry sign and a flexed arm that read as a raised palm.
+
+## Motion
+
+`js/motion.js` plus the MOTION block in `css/style.css`. Three rules:
+
+1. **Motion explains a change.** Views rise as they replace one another, items arrive
+   in reading order, bars grow from the baseline because that is where they are
+   measured from. Nothing moves decoratively.
+2. **Transform and opacity only**, so every frame composites and nothing reflows.
+3. **`prefers-reduced-motion` turns all of it off** — the CSS kill-switch zeroes
+   durations and `motionOff()` stops the JS-driven counters.
+
+`animateView(host)` runs from the router after every render, including a period
+switch, so changing week to month looks like the data moved rather than the page
+blinking.
+
+**A counting number reads its target from its own rendered text**, never from the
+stored value. The first version counted the record's value into the formatted string
+— 5200 metres inside the template `"5.20 km"` — and displayed `3376.66 km` on the way
+up. Storage units and display units are different things. `data-count` is a flag with
+no value for the same reason. While a counter runs the element carries
+`data-counting`, which is how tests and screenshots wait for the settled figure
+instead of sampling a frame mid-count.
+
 ## Charts
 
 Single series throughout, so no legends — the heading names what is plotted. Thin

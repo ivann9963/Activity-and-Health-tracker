@@ -730,3 +730,176 @@ a.metric-tile:hover { border-color: var(--brand-solid); }
 .effort-unit  { font-size: 14px; font-weight: 500; color: var(--text-tertiary); }
 .effort-note  { grid-area: note; font-size: 14px; line-height: 20px;
                 color: var(--text-tertiary); margin-top: 2px; }
+
+/* === IDENTITY ===================================================================
+   Untitled UI's tokens give this app correct greys, spacing and type. They do not
+   give it a face — every product built on them looks like every other one, which is
+   exactly the complaint. What follows is the part that is this app's own.
+
+   Three moves, and they are deliberately few:
+     1. Numbers are the subject. They get optical sizing, tight tracking and a slashed
+        zero, and they are the largest thing on any card. Everything else recedes.
+     2. Surfaces have a light source. A hairline top highlight and a vertical wash
+        give a card a top and a bottom; flat rectangles with a 1px border are the
+        default-dashboard look.
+     3. The accent glows rather than merely being coloured. One accent, used sparingly,
+        carrying a soft halo wherever it means "this is live". */
+
+:root {
+  /* A measured, slightly condensed treatment for figures. `tabular-nums` keeps
+     columns aligned; `slashed-zero` stops 0 reading as O at a glance in a gym. */
+  --numerals: "tnum" 1, "zero" 1, "cv01" 1;
+  --accent-glow: 0 0 0 1px color-mix(in srgb, var(--brand-500) 26%, transparent),
+                 0 6px 22px -8px color-mix(in srgb, var(--brand-500) 60%, transparent);
+  --card-sheen: linear-gradient(180deg,
+                  color-mix(in srgb, #FFF 4%, transparent) 0%,
+                  transparent 38%);
+}
+:root[data-theme="light"] {
+  --card-sheen: linear-gradient(180deg,
+                  color-mix(in srgb, #FFF 90%, transparent) 0%,
+                  transparent 46%);
+}
+
+.metric-value, .stat-value, .hero-figure, .year-title, .effort-value,
+.share-value, .hero-inline, .fact-value, .dup-value, .total-card .total-value {
+  font-feature-settings: var(--numerals);
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* Cards get a top edge. The inset hairline is the light catching the rim; the wash
+   underneath it gives the surface a direction. Both are almost invisible on their
+   own and are the whole difference between "a box" and "a thing". */
+.card, .metric-tile, .dialog {
+  background-image: var(--card-sheen);
+  box-shadow: var(--shadow-card),
+              inset 0 1px 0 0 color-mix(in srgb, #FFF 6%, transparent);
+}
+:root[data-theme="light"] .card,
+:root[data-theme="light"] .metric-tile,
+:root[data-theme="light"] .dialog {
+  box-shadow: var(--shadow-card);
+}
+
+/* A tile with data earns the accent rim; an empty one stays quiet. Previously every
+   tile looked identical whether it held a number or a dash. */
+.metric-tile.has-data { border-color: color-mix(in srgb, var(--brand-500) 22%, var(--border-secondary)); }
+.metric-tile.is-empty { opacity: 1; background-image: none; box-shadow: none;
+                        border-style: dashed; }
+.metric-tile.is-empty .metric-value { color: var(--text-quaternary); font-weight: 500; }
+
+/* Icons sit in a tinted well rather than floating next to the label. */
+.metric-icon, .effort-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+}
+.metric-tile.has-data .metric-icon {
+  background: var(--brand-subtle-bg);
+  color: var(--brand-fg);
+}
+.icon { display: block; flex: none; }
+/* Inline icons in running text and labels sit on the baseline. */
+.stat-label .icon, .share-label .icon, .data-table .icon,
+.headline .icon, .field .icon, .chip-toggle .icon, .yes .icon {
+  display: inline-block; vertical-align: -0.15em;
+}
+
+.app-mark { display: inline-flex; margin-right: 8px; color: var(--brand-fg); }
+.app-title { display: flex; align-items: center; }
+
+/* The active tab carries the halo. It is the one place the accent is allowed to glow
+   in the chrome, so "where am I" is answered peripherally. */
+.nav-btn { position: relative; }
+.nav-btn.active .nav-icon {
+  color: var(--brand-fg);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--brand-500) 55%, transparent));
+}
+.nav-btn.active::before {
+  content: ''; position: absolute; top: 0; left: 50%; width: 22px; height: 2px;
+  transform: translateX(-50%);
+  background: var(--brand-solid); border-radius: 0 0 2px 2px;
+}
+.nav-label { letter-spacing: 0.01em; }
+
+.btn-primary { box-shadow: var(--accent-glow); }
+
+/* === MOTION =====================================================================
+   Transform and opacity only, so every frame is composited and nothing reflows.
+   The reduced-motion block near the top of this file already zeroes all of it. */
+
+/* A view rises as it replaces the last. Small distance, short duration: this reads
+   as the screen settling, not as a slide transition. */
+@keyframes view-in {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+.view-enter { animation: view-in 260ms cubic-bezier(.2, .7, .3, 1) both; }
+
+/* Items arrive in reading order. --enter-delay is set per node by js/motion.js. */
+@keyframes item-in {
+  from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+.view-enter .metric-tile,
+.view-enter .stat-tile,
+.view-enter .share-row,
+.view-enter .effort-row,
+.view-enter .list-row {
+  animation: item-in 300ms cubic-bezier(.2, .7, .3, 1) both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+/* Bars grow from the baseline, which is the direction they are measured in. */
+.share-fill, .meter-fill, .progress-fill {
+  transition: width 620ms cubic-bezier(.2, .7, .3, 1);
+}
+.bars .bar { transform-origin: bottom; }
+.view-enter .bars .bar {
+  animation: bar-grow 460ms cubic-bezier(.2, .7, .3, 1) both;
+  animation-delay: calc(var(--enter-delay, 0ms) + 80ms);
+}
+@keyframes bar-grow { from { transform: scaleY(0); } to { transform: none; } }
+
+/* Chart marks draw in with the card rather than appearing under it. */
+.view-enter .chart-bar { animation: mark-in 420ms cubic-bezier(.2,.7,.3,1) both; }
+@keyframes mark-in { from { opacity: 0; transform: translate3d(0,6px,0); } to { opacity: 1; transform: none; } }
+.view-enter .heat-cell { animation: cell-in 320ms ease-out both; }
+@keyframes cell-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Controls answer a press. 60ms down, because anything slower feels like lag. */
+.btn, .icon-btn, .nav-btn, .chip-toggle, .tile-hide, .segmented button, a.metric-tile {
+  transition: transform 60ms ease, background .12s ease, border-color .12s ease,
+              color .12s ease, box-shadow .16s ease;
+}
+.btn:active, .icon-btn:active, .chip-toggle:active, .tile-hide:active,
+.segmented button:active { transform: scale(.97); }
+.nav-btn:active { transform: scale(.92); }
+a.metric-tile:hover { transform: translateY(-2px); }
+a.metric-tile:active { transform: scale(.99); }
+
+/* The segmented control's active pill slides rather than teleporting. */
+.segmented button { transition: color .16s ease, background .22s cubic-bezier(.2,.7,.3,1); }
+
+/* A toast arrives from the direction it lives in. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+.toast { animation: toast-in 240ms cubic-bezier(.2, .7, .3, 1) both; }
+
+/* Dialogs scale up from just under full size — enough to register as arriving. */
+@keyframes dialog-in {
+  from { opacity: 0; transform: scale(.96) translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+.dialog { animation: dialog-in 200ms cubic-bezier(.2, .7, .3, 1) both; }
+.dialog-backdrop { animation: cell-in 160ms ease-out both; }
+
+/* The indeterminate import bar: a travelling sheen, not a jumping block. */
+.progress.indeterminate .progress-fill {
+  background: linear-gradient(90deg, transparent,
+              var(--brand-solid) 40%, var(--brand-400) 60%, transparent);
+}

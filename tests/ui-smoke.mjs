@@ -49,6 +49,12 @@ const errors = [];
 // it does not — Pages Functions only run on the deployed site — so that probe 404s by
 // design and the app correctly falls back to "sync needs the deployed version".
 // Only that one path is exempt; every other console error still fails the run.
+// Figures count up on entrance, so reading the screen too early samples a frame
+// mid-count. js/motion.js marks a running counter; wait for none to be left.
+const settled = () => page.waitForFunction(
+  () => document.querySelectorAll('[data-counting]').length === 0,
+  null, { timeout: 10000 });
+
 const EXPECTED_404 = /\/api\/oauth\//;
 const isExpected = text => /404|Failed to load resource/.test(text) && EXPECTED_404.test(text);
 page.on('console', m => {
@@ -103,6 +109,27 @@ try {
   await page.waitForSelector('.metric-grid');
   const home = await page.locator('#view-host').innerText();
   check('the view opens on a period that actually has data', !/This week/.test(home), home.slice(0, 200));
+
+  // Figures count up on entrance. The first version counted the STORED value into
+  // the FORMATTED string — 5200 metres inside the template "5.20 km" — and showed
+  // 3376.66 km on the way up. Every frame must stay within the final value, so
+  // sample mid-count and check no number has overshot.
+  await page.locator('.segmented button:has-text("Month")').click();
+  await page.waitForSelector('.metric-grid');
+  await page.waitForTimeout(90);
+  const midCount = await page.evaluate(() =>
+    [...document.querySelectorAll('.metric-value')].map(n => n.textContent.trim()));
+  await page.waitForFunction(
+    () => document.querySelectorAll('[data-counting]').length === 0, null, { timeout: 10000 });
+  const settledCount = await page.evaluate(() =>
+    [...document.querySelectorAll('.metric-value')].map(n => n.textContent.trim()));
+  const num = t => { const m = String(t).match(/[\d][\d,]*(\.\d+)?/); return m ? Number(m[0].replace(/,/g, '')) : 0; };
+  const overshot = midCount.filter((t, i) => num(t) > num(settledCount[i]) + 0.001);
+  check('a counting figure never exceeds the value it is counting to',
+    overshot.length === 0, `${JSON.stringify(overshot)} vs ${JSON.stringify(settledCount)}`);
+  check('and the units survive the count',
+    midCount.every((t, i) => t.replace(/[\d.,]/g, '') === settledCount[i].replace(/[\d.,]/g, '')),
+    JSON.stringify(midCount));
   check('all-time totals are shown', /All time/.test(home));
 
   await page.locator('.segmented button:has-text("Year")').click();
@@ -393,6 +420,7 @@ try {
   await page.waitForSelector('.metric-grid');
   await page.locator('.segmented button:has-text("Year")').click();
   await page.waitForSelector('.metric-grid');
+  await settled();
   const restored = await page.locator('#view-host').innerText();
   check('the data comes back', /All time/i.test(restored) && /km/.test(restored),
     restored.slice(0, 300));
@@ -420,6 +448,7 @@ try {
   await page.waitForSelector('.metric-grid');
   await page.locator('.segmented button:has-text("Year")').click();
   await page.waitForSelector('.metric-grid');
+  await settled();
   const afterSecond = await page.locator('#view-host').innerText();
   check('and changes nothing', afterSecond === afterRestore,
     'totals differed after a second restore');

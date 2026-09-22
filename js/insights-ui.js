@@ -13,7 +13,7 @@ function renderInsights(host) {
   return Promise.all([loadSettings(), dataBounds()]).then(([settings, bounds]) => {
     if (!bounds.from) {
       host.innerHTML = `<div class="view-head"><h1>Insights</h1></div>
-        <div class="card empty-state"><div class="empty-icon" aria-hidden="true">📊</div>
+        <div class="card empty-state"><div class="empty-icon">${icon('insights', 40)}</div>
         <h2>Nothing to analyse yet</h2>
         <p>Import your history and this fills in.</p>
         <button class="btn btn-primary" onclick="navigate('data')">Add your data</button></div>`;
@@ -81,7 +81,7 @@ function shareCardHtml(share, totalSeconds, hidden) {
     <div class="hidden-row">
       <span class="subtle">Set aside:</span>
       ${hidden.map(g => `<button class="chip-toggle" data-show-activity="${escHtml(g.key)}"
-          title="Count ${escHtml(g.label)} again">${g.icon} ${escHtml(g.label)} <span aria-hidden="true">+</span></button>`).join('')}
+          title="Count ${escHtml(g.label)} again">${iconOrText(g.icon, 14)} ${escHtml(g.label)} ${icon('plus', 14)}</button>`).join('')}
     </div>` : '';
 
   if (!share.length) {
@@ -93,18 +93,18 @@ function shareCardHtml(share, totalSeconds, hidden) {
 
   return `<div class="card">
     <h2>Where the time went</h2>
-    <p class="headline">Mostly ${top.icon} <strong>${escHtml(top.label)}</strong> —
+    <p class="headline">Mostly ${iconOrText(top.icon, 16)} <strong>${escHtml(top.label)}</strong> —
        ${Math.round(top.pct)}% of ${escHtml(formatMetric('time_gym', totalSeconds))}.</p>
     <div class="metric-grid">
-      ${share.map(s => `<div class="metric-tile ${s.unlabelled ? 'is-unlabelled' : ''}">
+      ${share.map(s => `<div class="metric-tile has-data ${s.unlabelled ? 'is-unlabelled' : ''}">
         <button class="tile-hide" data-hide-activity="${escHtml(s.key)}"
                 aria-label="Set aside ${escHtml(s.label)}"
-                title="Set aside ${escHtml(s.label)}">×</button>
+                title="Set aside ${escHtml(s.label)}">${icon('close', 16)}</button>
         <div class="metric-head">
-          <span class="metric-icon" aria-hidden="true">${s.icon}</span>
+          <span class="metric-icon">${iconOrText(s.icon)}</span>
           <span class="metric-name">${escHtml(s.label)}</span>
         </div>
-        <div class="metric-value">${escHtml(formatMetric('time_gym', s.seconds))}</div>
+        <div class="metric-value" data-count>${escHtml(formatMetric('time_gym', s.seconds))}</div>
         <div class="metric-delta neutral">${Math.round(s.pct)}% of your time</div>
       </div>`).join('')}
     </div>
@@ -206,7 +206,7 @@ function hrByActivityCardHtml(hr) {
     <h2>Effort by sport</h2>
     ${hr.map(h => `
       <div class="effort-row">
-        <span class="effort-icon" aria-hidden="true">${h.icon}</span>
+        <span class="effort-icon">${iconOrText(h.icon, 18)}</span>
         <span class="effort-name">${escHtml(h.label)}</span>
         <span class="effort-value">${h.avgHr}<span class="effort-unit"> bpm</span></span>
         <span class="effort-note">hardest ${h.highestSessionAvg} bpm ·
@@ -309,4 +309,4 @@ function setActivityCounted(key, counted) {
   });
 }
 
-registerView({ id: 'insights', label: 'Insights', icon: '📊', render: renderInsights });
+registerView({ id: 'insights', label: 'Insights', icon: 'insights', render: renderInsights });

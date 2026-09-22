@@ -33,7 +33,7 @@ function renderNav() {
   nav.innerHTML = VIEWS.filter(v => v.inNav !== false).map(v => `
     <button class="nav-btn ${v.id === active ? 'active' : ''}"
             onclick="navigate('${v.id}')" aria-current="${v.id === active ? 'page' : 'false'}">
-      <span class="nav-icon" aria-hidden="true">${v.icon}</span>
+      <span class="nav-icon">${iconOrText(v.icon, 22)}</span>
       <span class="nav-label">${escHtml(v.label)}</span>
     </button>`).join('');
 }
@@ -43,14 +43,25 @@ function renderCurrentView() {
   const view = VIEWS.find(v => v.id === id);
   const host = el('view-host');
   if (!view || !host) return;
+  const changed = _currentView !== id;
   _currentView = id;
   renderNav();
   // Views may render synchronously or return a promise; either is fine.
-  Promise.resolve(view.render(host)).catch(err => {
-    console.error(err);
-    host.innerHTML = `<div class="card error"><h2>Something went wrong</h2>
-      <pre>${escHtml(err && err.message || String(err))}</pre></div>`;
-  });
+  Promise.resolve(view.render(host))
+    .then(() => {
+      // Restart the entrance on every render, not only on a route change: switching
+      // week to month is a change of data, and it should look like one.
+      host.classList.remove('view-enter');
+      void host.offsetWidth;          // forces the removal to commit
+      host.classList.add('view-enter');
+      if (changed) window.scrollTo({ top: 0, behavior: 'auto' });
+      animateView(host);
+    })
+    .catch(err => {
+      console.error(err);
+      host.innerHTML = `<div class="card error"><h2>Something went wrong</h2>
+        <pre>${escHtml(err && err.message || String(err))}</pre></div>`;
+    });
 }
 
 // Re-render the active view after data changes, but only if it is still on screen.

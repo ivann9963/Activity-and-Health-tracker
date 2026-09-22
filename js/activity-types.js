@@ -4,18 +4,18 @@
 // single file means adding a new source is a data change, not a code change.
 
 const ACTIVITIES = {
-  running:    { label: 'Running',       icon: '🏃', tracks: 'distance' },
-  walking:    { label: 'Walking',       icon: '🚶', tracks: 'distance' },
-  cycling:    { label: 'Cycling',       icon: '🚴', tracks: 'distance' },
-  swimming:   { label: 'Swimming',      icon: '🏊', tracks: 'distance' },
-  strength:   { label: 'Gym',           icon: '🏋️', tracks: 'duration' },
-  racket:     { label: 'Racket sports', icon: '🎾', tracks: 'duration' },
-  hiking:     { label: 'Hiking',        icon: '🥾', tracks: 'distance' },
-  rowing:     { label: 'Rowing',        icon: '🚣', tracks: 'distance' },
-  elliptical: { label: 'Elliptical',    icon: '🌀', tracks: 'duration' },
-  hiit:       { label: 'HIIT',          icon: '⚡', tracks: 'duration' },
-  yoga:       { label: 'Yoga',          icon: '🧘', tracks: 'duration' },
-  other:      { label: 'Other',         icon: '💪', tracks: 'duration' }
+  running:    { label: 'Running',       icon: 'running', tracks: 'distance' },
+  walking:    { label: 'Walking',       icon: 'walking', tracks: 'distance' },
+  cycling:    { label: 'Cycling',       icon: 'cycling', tracks: 'distance' },
+  swimming:   { label: 'Swimming',      icon: 'swimming', tracks: 'distance' },
+  strength:   { label: 'Gym',           icon: 'strength', tracks: 'duration' },
+  racket:     { label: 'Racket sports', icon: 'racket', tracks: 'duration' },
+  hiking:     { label: 'Hiking',        icon: 'hiking', tracks: 'distance' },
+  rowing:     { label: 'Rowing',        icon: 'rowing', tracks: 'distance' },
+  elliptical: { label: 'Elliptical',    icon: 'elliptical', tracks: 'duration' },
+  hiit:       { label: 'HIIT',          icon: 'hiit', tracks: 'duration' },
+  yoga:       { label: 'Yoga',          icon: 'yoga', tracks: 'duration' },
+  other:      { label: 'Other',         icon: 'other', tracks: 'duration' }
 };
 
 // Apple's HKWorkoutActivityType values, minus the shared prefix (stripped before

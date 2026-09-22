@@ -11,47 +11,47 @@
 
 const METRICS = {
   steps: {
-    label: 'Steps', icon: '👟', kind: 'total', from: 'daily',
+    label: 'Steps', icon: 'steps', kind: 'total', from: 'daily',
     unit: 'steps', dayAgg: 'sum', periodAgg: 'sum', goalable: true
   },
   distance_run: {
-    label: 'Running', icon: '🏃', kind: 'total', from: 'sessions',
+    label: 'Running', icon: 'running', kind: 'total', from: 'sessions',
     activity: 'running', field: 'distanceM',
     unit: 'm', display: 'km', dayAgg: 'sum', periodAgg: 'sum', goalable: true
   },
   distance_swim: {
-    label: 'Swimming', icon: '🏊', kind: 'total', from: 'sessions',
+    label: 'Swimming', icon: 'swimming', kind: 'total', from: 'sessions',
     activity: 'swimming', field: 'distanceM',
     unit: 'm', display: 'km', dayAgg: 'sum', periodAgg: 'sum', goalable: true
   },
   distance_cycle: {
-    label: 'Cycling', icon: '🚴', kind: 'total', from: 'sessions',
+    label: 'Cycling', icon: 'cycling', kind: 'total', from: 'sessions',
     activity: 'cycling', field: 'distanceM',
     unit: 'm', display: 'km', dayAgg: 'sum', periodAgg: 'sum', goalable: true
   },
   time_gym: {
-    label: 'Gym', icon: '🏋️', kind: 'total', from: 'sessions',
+    label: 'Gym', icon: 'strength', kind: 'total', from: 'sessions',
     activity: 'strength', field: 'durationSec',
     unit: 's', display: 'duration', dayAgg: 'sum', periodAgg: 'sum', goalable: true
   },
   time_racket: {
-    label: 'Racket sports', icon: '🎾', kind: 'total', from: 'sessions',
+    label: 'Racket sports', icon: 'racket', kind: 'total', from: 'sessions',
     activity: 'racket', field: 'durationSec',
     unit: 's', display: 'duration', dayAgg: 'sum', periodAgg: 'sum', goalable: true
   },
   weight: {
-    label: 'Weight', icon: '⚖️', kind: 'trend', from: 'daily',
+    label: 'Weight', icon: 'weight', kind: 'trend', from: 'daily',
     // 'last' within a day: weighing yourself twice does not mean you weigh the average,
     // it means the later reading supersedes the earlier one.
     unit: 'kg', dayAgg: 'last', periodAgg: 'avg', goalable: false, decimals: 1
   },
   resting_hr: {
-    label: 'Resting heart rate', icon: '❤️', kind: 'trend', from: 'daily',
+    label: 'Resting heart rate', icon: 'heart', kind: 'trend', from: 'daily',
     unit: 'bpm', dayAgg: 'avg', periodAgg: 'avg', goalable: false,
     lowerIsBetter: true
   },
   sleep: {
-    label: 'Sleep', icon: '😴', kind: 'trend', from: 'daily',
+    label: 'Sleep', icon: 'sleep', kind: 'trend', from: 'daily',
     unit: 'min', display: 'duration', dayAgg: 'sum', periodAgg: 'avg', goalable: false
   }
 };

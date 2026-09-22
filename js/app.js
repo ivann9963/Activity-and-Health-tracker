@@ -3,6 +3,10 @@
 // the saved theme, then hands over to the router.
 
 function boot() {
+  // The wordmark's glyph, from the same set as everything else.
+  const mark = el('app-mark');
+  if (mark) mark.innerHTML = icon('running', 20);
+
   openDB()
     .then(loadSettings)
     .then(settings => {

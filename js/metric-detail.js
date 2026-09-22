@@ -70,7 +70,7 @@ function detailHtml(id, metric, byDay, allByDay, range, all, sessions, settings,
   return `
     <button class="btn-link back-link" onclick="navigate('home')">‹ Home</button>
     <div class="view-head">
-      <h1>${metric.icon} ${escHtml(metric.label)}</h1>
+      <h1>${iconOrText(metric.icon, 24)} ${escHtml(metric.label)}</h1>
     </div>
 
     <div class="segmented" role="tablist">
@@ -273,5 +273,5 @@ function wireDetail(id, goals) {
   }
 }
 
-registerView({ id: 'metric', label: 'Metric', icon: '📈', inNav: false,
+registerView({ id: 'metric', label: 'Metric', icon: 'trend', inNav: false,
                render: renderMetricDetail });

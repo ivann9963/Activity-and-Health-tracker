@@ -37,7 +37,7 @@ function activityGroupsPresent(sessions) {
     const named = activityLabel(s.activity, s.rawActivity);
     const label = key === 'unlabelled' ? 'Uncategorised workouts' : named;
     const g = groups.get(key) ||
-      { key, label, icon: (ACTIVITIES[s.activity] || {}).icon || (key === 'unlabelled' ? '❓' : '💪'),
+      { key, label, icon: (ACTIVITIES[s.activity] || {}).icon || (key === 'unlabelled' ? 'unlabelled' : 'other'),
         seconds: 0, sessions: 0 };
     g.seconds += s.durationSec;
     g.sessions++;
@@ -107,7 +107,7 @@ function timeByActivity(sessions, opts) {
       activity: entry.activity,
       key,
       label: entry.label,
-      icon: entry.unlabelled ? '❓' : ((ACTIVITIES[entry.activity] || {}).icon || '💪'),
+      icon: entry.unlabelled ? 'unlabelled' : ((ACTIVITIES[entry.activity] || {}).icon || 'other'),
       unlabelled: entry.unlabelled,
       sessions: entry.sessions,
       seconds: entry.seconds,
@@ -144,7 +144,7 @@ function avgHrByActivity(sessions, opts) {
     .map(([activity, a]) => ({
       activity,
       label: a.label,
-      icon: activity === 'unlabelled' ? '❓' : ((ACTIVITIES[activity] || {}).icon || '💪'),
+      icon: activity === 'unlabelled' ? 'unlabelled' : ((ACTIVITIES[activity] || {}).icon || 'other'),
       avgHr: Math.round(a.weighted / a.seconds),
       highestSessionAvg: a.max,
       sessions: a.count,
