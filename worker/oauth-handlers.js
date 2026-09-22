@@ -159,8 +159,14 @@ export async function handleStatus(request, env) {
   };
   if (missing.length) {
     body.missing = missing;
-    body.hint = 'Add these as runtime Secrets on the Worker (Settings → Variables and ' +
-                'Secrets), not as build variables, then redeploy.';
+    // "Secret" rather than "Variable" is load-bearing, not a style preference: a
+    // plaintext variable that wrangler.toml does not declare is REMOVED by the next
+    // deploy, so one added that way works until the next push and then silently
+    // stops. A Secret survives.
+    body.hint = 'Add these on the Worker under Settings → Variables and Secrets, with ' +
+                'the type set to Secret — not Variable, and not a build variable. A ' +
+                'plaintext Variable is wiped by the next deploy, which looks exactly ' +
+                'like this.';
   }
   return json(body);
 }
