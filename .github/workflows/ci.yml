@@ -40,3 +40,55 @@ jobs:
 
       - name: UI smoke test (built output)
         run: npm run test:ui:build
+
+  # Cloudflare can also build this itself, from its dashboard's Git integration. That
+  # integration silently disconnected once and nothing deployed for a day: pushes were
+  # green, CI was green, and the live site simply stayed on an old commit with no
+  # failure anywhere to notice.
+  #
+  # Deploying from here instead makes a failed deploy look like a failed deploy. It
+  # needs two repository secrets, CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; with
+  # neither set the job skips, so this is inert until they exist and the dashboard
+  # stays in charge.
+  deploy:
+    needs: test
+    if: github.ref_name == 'claude/upbeat-archimedes-evouv5' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Check whether deployment is configured
+        id: gate
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set — skipping deploy."
+          fi
+
+      - name: Install dependencies
+        if: steps.gate.outputs.ready == 'true'
+        run: npm ci
+
+      # The same build Cloudflare's dashboard runs. It stamps the commit into the
+      # page and writes _site/build.json, which is what /api/oauth/status reports —
+      # so "which version is live" stays answerable from the browser.
+      - name: Build
+        if: steps.gate.outputs.ready == 'true'
+        run: npm run build
+
+      - name: Deploy to Cloudflare
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy

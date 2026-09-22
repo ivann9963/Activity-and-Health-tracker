@@ -123,6 +123,30 @@ separate ramps.
 Pace is drawn as an inverted line, because lower is better and bars would make
 improvement look like decline.
 
+## Deploying
+
+Cloudflare Worker with static assets (`[assets]` + `main` in `wrangler.toml`), not
+Pages. `npm run build` writes `_site/` and stamps the commit into the page and into
+`_site/build.json`, which `/api/oauth/status` reports — so **"which version is live"
+is answerable from a browser**, and that endpoint is the first thing to check when a
+change seems not to have shipped. It is the one path the service worker is forbidden
+to cache.
+
+Two routes to production, and they do not conflict:
+
+- Cloudflare's dashboard Git integration. It **silently disconnected once** and
+  nothing deployed for a day — pushes green, CI green, live site frozen on an old
+  commit, no failure anywhere to notice. If the live build id is stale, look at
+  Workers → the Worker → Builds for "disconnected from your Git account" before
+  suspecting a cache.
+- `.github/workflows/ci.yml`, which deploys after the tests pass. It skips unless
+  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set as repository secrets.
+  This exists so a failed deploy looks like a failed deploy.
+
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` go on the Worker as **Secrets**, not
+plaintext Variables. A Variable that `wrangler.toml` does not declare is removed by
+the next deploy, so one added that way works until the next push and then stops.
+
 ## Sources
 
 Apple Health export is the historical backbone; there is no API and never will be.
