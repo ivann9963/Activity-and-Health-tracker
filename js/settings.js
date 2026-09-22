@@ -3,6 +3,19 @@
 // here rather than buried in the dedupe screen because it is the single lever that
 // decides which device's numbers win, and it is worth being able to see at a glance.
 
+// What an import writes, as opposed to how the app has been set up.
+const DATA_STORES = ['sessions', 'daily', 'imports', 'overrides'];
+const SETUP_STORES = ['settings', 'goals'];
+
+// Everything, including the setup. Disconnecting from Google is attempted too, but a
+// failure there must not block the reset — the local wipe is the part the user asked
+// for, and the connection is a cookie the browser will drop anyway.
+function startFresh() {
+  return Promise.resolve()
+    .then(() => disconnectGoogle().catch(() => {}))
+    .then(() => Promise.all(DATA_STORES.concat(SETUP_STORES).map(dbClear)));
+}
+
 function renderSettings(host) {
   // The OAuth callback lands on this screen, so report its outcome before rendering.
   const callback = consumeGoogleCallback();
@@ -94,8 +107,14 @@ function renderSettings(host) {
           <h2>Stored data</h2>
           <p class="subtle">${humanCount(sessions)} workouts · ${humanCount(daily)} daily figures,
              all held in this browser on this device.</p>
+          <p class="subtle">Two different things, because they are rarely both wanted.
+             <strong>Delete imported data</strong> removes the workouts and daily
+             figures but keeps your goals, tile choices and device ranking — for
+             redoing a bad import. <strong>Start fresh</strong> removes those too and
+             returns the app to how it arrived.</p>
           <div class="card-actions">
-            <button class="btn btn-danger" id="wipe">Delete everything</button>
+            <button class="btn btn-ghost" id="wipe">Delete imported data</button>
+            <button class="btn btn-danger" id="reset">Start fresh</button>
           </div>
         </div>`;
 
@@ -154,14 +173,36 @@ function renderSettings(host) {
           .finally(() => { btn.disabled = false; btn.textContent = 'Save a backup'; });
       };
 
+      // Clearing the data but keeping the setup: the common case is a bad import you
+      // want to redo, where losing your goals and tile choices too would be a
+      // punishment rather than a feature.
       el('wipe').onclick = () => confirmDialog({
-        title: 'Delete all stored data?',
+        title: 'Delete imported data?',
         message: 'Every imported workout and daily figure is removed from this device. ' +
-                 'Your original export files are untouched, so you can always import again.',
-        confirmLabel: 'Delete everything', danger: true
+                 'Your goals, tile choices and device ranking are kept, and your ' +
+                 'original export files are untouched — so you can import again. ' +
+                 'Save a backup first if you want this data back.',
+        confirmLabel: 'Delete data', danger: true
       }, () => {
-        Promise.all(['sessions', 'daily', 'imports', 'overrides'].map(dbClear))
-          .then(() => { showToast('All data deleted', 'success'); refreshView(); });
+        Promise.all(DATA_STORES.map(dbClear))
+          .then(() => { showToast('Imported data deleted', 'success'); refreshView(); });
+      });
+
+      // Back to a first-run app. The reload matters: views hold state in module
+      // variables — which period is showing, which year the review is on — and
+      // clearing the database underneath them would leave that pointing at nothing.
+      el('reset').onclick = () => confirmDialog({
+        title: 'Start fresh?',
+        message: 'Everything goes: imported data, goals, tile choices, device ranking ' +
+                 'and any Google connection. The app returns to how it was the first ' +
+                 'time you opened it. Your export files are untouched. Save a backup ' +
+                 'first if there is anything here you want back.',
+        confirmLabel: 'Start fresh', danger: true
+      }, () => {
+        startFresh().then(() => {
+          showToast('Starting fresh…', 'success');
+          setTimeout(() => location.reload(), 400);
+        });
       });
     });
 }

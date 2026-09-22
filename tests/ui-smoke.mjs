@@ -249,6 +249,17 @@ try {
   check('the dashboard has a heading of its own',
     (await page.locator('h1.period-label').innerText()).length > 0);
 
+  // --- the two kinds of clearing ---
+  // Deleting data must keep the setup; starting fresh must not. A single button that
+  // did both would make redoing a bad import cost your goals as well.
+  await page.locator('.nav-btn:has-text("Settings")').click();
+  await page.waitForSelector('#reset');
+  check('data deletion and a full reset are separate actions',
+    (await page.locator('#wipe').count()) === 1 && (await page.locator('#reset').count()) === 1);
+  const resetCopy = await page.locator('.card:has(#reset)').innerText();
+  check('and the difference is spelled out',
+    /keeps|kept/i.test(resetCopy) && /goals/i.test(resetCopy), resetCopy.slice(0, 260));
+
   // --- backup round trip ---
   // A backup that cannot be restored is worse than no backup, so this deletes
   // everything and brings it back rather than just checking a file downloads.
@@ -290,7 +301,7 @@ try {
 
   await page.locator('#wipe').click();
   await page.waitForSelector('.dialog');
-  await page.locator('.dialog button:has-text("Delete everything")').click();
+  await page.locator('.dialog button:has-text("Delete data")').click();
   await page.waitForFunction(
     () => /0 workouts/.test(document.body.innerText), null, { timeout: 15000 });
   check('deleting everything really empties it', true);
