@@ -139,7 +139,10 @@ try {
   await page.waitForSelector('.share-row', { timeout: 15000 });
   const insights = await page.locator('#view-host').innerText();
   check('the time share names where most of it went',
-    /Most of it went on/i.test(insights), insights.slice(0, 400));
+    /Mostly/i.test(insights) && /% of/.test(insights), insights.slice(0, 400));
+  // Methodology stays available but no longer sits above the answer.
+  check('the reasoning is one tap away rather than in the way',
+    /how this is counted/i.test(insights));
   check('active days separate deliberate activity from walking',
     /active days/i.test(insights) && /walking only/i.test(insights));
   check('effort by sport reports a weighted average',

@@ -1010,6 +1010,33 @@ function insightsTests() {
   const S = (over) => ({ activity: 'running', localDate: '2026-03-02',
                          durationSec: 1800, distanceM: 5000, avgHr: 150, ...over });
 
+  suite('unrecognised workouts keep their own name', () => {
+    // "Other — 19% of your time" tells you nothing. Apple records the type on the
+    // session, so it is used rather than thrown away.
+    eq('an unmapped Apple type becomes readable',
+       app.humaniseRawActivity('HKWorkoutActivityTypeClimbing'), 'Climbing');
+    eq('camel case becomes words',
+       app.humaniseRawActivity('HKWorkoutActivityTypeCrossCountrySkiing'),
+       'Cross country skiing');
+    eq('a type that really is "other" has no better name',
+       app.humaniseRawActivity('HKWorkoutActivityTypeOther'), null);
+    eq('and nothing at all falls back', app.activityLabel('other', null), 'Unlabelled');
+    eq('a known category keeps its own label', app.activityLabel('running', 'anything'),
+       'Running');
+
+    // Two different unmapped sports must not merge into one bar.
+    const share = app.timeByActivity([
+      S({ activity: 'other', rawActivity: 'HKWorkoutActivityTypeClimbing', durationSec: 3600 }),
+      S({ activity: 'other', rawActivity: 'HKWorkoutActivityTypeGolf', durationSec: 1800 }),
+      S({ activity: 'running', durationSec: 1800 })
+    ]);
+    eq('each unmapped sport gets its own row', share.length, 3);
+    eq('named by its own type', share[0].label, 'Climbing');
+    ok('and they did not merge',
+       share.some(r => r.label === 'Golf') && share.some(r => r.label === 'Climbing'));
+    ok('no row is called "Other"', !share.some(r => r.label === 'Other'));
+  });
+
   suite('where the time goes', () => {
     const share = app.timeByActivity([
       S({ activity: 'running', durationSec: 3600 }),

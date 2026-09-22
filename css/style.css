@@ -425,11 +425,12 @@ a.metric-tile:hover { border-color: var(--accent); }
 /* --- share bars ----------------------------------------------------------------
    A ranked list of shares. The data-end is rounded and the baseline square, the
    same rule the SVG marks follow. */
-.share-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
-             align-items: baseline; margin-top: 12px; }
-.share-label { font-size: 14px; }
-.share-value { font-size: 13px; color: var(--text-dim);
+.share-row { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px;
+             align-items: baseline; margin-top: 18px; }
+.share-label { font-size: 15px; font-weight: 550; }
+.share-value { font-size: 16px; font-weight: 600; color: var(--text);
                font-variant-numeric: tabular-nums; white-space: nowrap; }
+.share-value .share-pct { color: var(--text-dim); font-weight: 400; font-size: 14px; }
 .share-track { grid-column: 1 / -1; height: 8px; border-radius: 0 4px 4px 0;
                background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .share-fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--accent-dim);
@@ -440,3 +441,11 @@ a.metric-tile:hover { border-color: var(--accent); }
                letter-spacing: -0.02em; display: flex; align-items: baseline;
                gap: 8px; flex-wrap: wrap; }
 .hero-inline .subtle { font-size: 14px; font-weight: 400; }
+
+/* Methodology belongs in the card, but not above the answer. These notes matter —
+   they are why the numbers can be trusted — so they stay one tap away rather than
+   being deleted. */
+.why { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 8px; }
+.why summary { font-size: 12px; color: var(--text-dim); }
+.why p { margin: 6px 0 0; font-size: 13px; }
+.src-count { opacity: .6; font-variant-numeric: tabular-nums; }

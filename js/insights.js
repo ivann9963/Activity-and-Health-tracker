@@ -23,17 +23,25 @@ function timeByActivity(sessions, opts) {
     // Walking is usually ambient rather than chosen, and counting it swamps
     // everything else. Callers decide; the year review leaves it out.
     if (o.excludeWalking && s.activity === 'walking') continue;
-    totals.set(s.activity, (totals.get(s.activity) || 0) + seconds);
+
+    // Unrecognised workouts group by their own type rather than pooling into one
+    // "Other" bar, which would hide the only thing that explains them.
+    const key = activityGroupKey(s.activity, s.rawActivity);
+    const entry = totals.get(key) ||
+      { seconds: 0, activity: s.activity, label: activityLabel(s.activity, s.rawActivity) };
+    entry.seconds += seconds;
+    totals.set(key, entry);
     grand += seconds;
   }
 
   return [...totals.entries()]
-    .map(([activity, seconds]) => ({
-      activity,
-      label: (ACTIVITIES[activity] || {}).label || activity,
-      icon: (ACTIVITIES[activity] || {}).icon || '',
-      seconds,
-      pct: grand > 0 ? (seconds / grand) * 100 : 0
+    .map(([key, entry]) => ({
+      activity: entry.activity,
+      key,
+      label: entry.label,
+      icon: (ACTIVITIES[entry.activity] || {}).icon || '💪',
+      seconds: entry.seconds,
+      pct: grand > 0 ? (entry.seconds / grand) * 100 : 0
     }))
     .sort((a, b) => b.seconds - a.seconds);
 }
@@ -46,19 +54,22 @@ function avgHrByActivity(sessions) {
 
   for (const s of sessions) {
     if (!counted(s) || !s.avgHr || !s.durationSec) continue;
-    const a = acc.get(s.activity) || { weighted: 0, seconds: 0, count: 0, max: 0 };
+    const key = activityGroupKey(s.activity, s.rawActivity);
+    const a = acc.get(key) ||
+      { weighted: 0, seconds: 0, count: 0, max: 0,
+        label: activityLabel(s.activity, s.rawActivity) };
     a.weighted += s.avgHr * s.durationSec;
     a.seconds += s.durationSec;
     a.count++;
     a.max = Math.max(a.max, s.avgHr);
-    acc.set(s.activity, a);
+    acc.set(key, a);
   }
 
   return [...acc.entries()]
     .map(([activity, a]) => ({
       activity,
-      label: (ACTIVITIES[activity] || {}).label || activity,
-      icon: (ACTIVITIES[activity] || {}).icon || '',
+      label: a.label,
+      icon: (ACTIVITIES[activity] || {}).icon || '💪',
       avgHr: Math.round(a.weighted / a.seconds),
       highestSessionAvg: a.max,
       sessions: a.count,

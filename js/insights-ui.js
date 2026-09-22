@@ -79,32 +79,34 @@ function shareCardHtml(share, totalSeconds) {
   const top = share[0];
   return `<div class="card">
     <h2>Where the time went</h2>
-    <p class="subtle">Share of time spent, not number of sessions — twelve short runs
-       and twelve long gym sessions are not the same period. Walking is left out; it is
-       ambient rather than chosen, and it swamps everything else.</p>
-    <p class="headline">Most of it went on ${top.icon} <strong>${escHtml(top.label)}</strong>
-       — ${Math.round(top.pct)}% of ${escHtml(formatMetric('time_gym', totalSeconds))}.</p>
+    <p class="headline">Mostly ${top.icon} <strong>${escHtml(top.label)}</strong> —
+       ${Math.round(top.pct)}% of ${escHtml(formatMetric('time_gym', totalSeconds))}.</p>
     ${share.map(s => `
       <div class="share-row">
         <span class="share-label">${s.icon} ${escHtml(s.label)}</span>
-        <span class="share-value">${escHtml(formatMetric('time_gym', s.seconds))} ·
-          ${Math.round(s.pct)}%</span>
+        <span class="share-value">${escHtml(formatMetric('time_gym', s.seconds))}
+          <span class="share-pct">${Math.round(s.pct)}%</span></span>
         <div class="share-track"><div class="share-fill" style="width:${s.pct.toFixed(1)}%"></div></div>
       </div>`).join('')}
+    <details class="why"><summary>How this is counted</summary>
+      <p class="subtle">Share of time, not number of sessions — twelve short runs and
+         twelve long gym sessions are not the same period. Walking is excluded: it is
+         ambient rather than chosen, and it swamps everything else.</p></details>
   </div>`;
 }
 
 function activeDaysCardHtml(d) {
   return `<div class="card">
     <h2>Active days</h2>
-    <p class="subtle">A day counts as active when you did something deliberate. Walking
-       alone does not qualify — a day at a desk still records a walk to the kitchen, and
-       counting it would make every day look active.</p>
     <div class="stat-row">
       ${statTile('Active', String(d.active), `${Math.round(d.pct)}% of ${d.total} days`)}
       ${statTile('Walking only', String(d.walkingOnly), '')}
       ${statTile('Nothing recorded', String(d.inactive), '')}
     </div>
+    <details class="why"><summary>What counts as active</summary>
+      <p class="subtle">Something deliberate. Walking alone does not qualify — a day at
+         a desk still records a walk to the kitchen, and counting it would make every
+         day look active.</p></details>
   </div>`;
 }
 
@@ -126,8 +128,6 @@ function hrBandCardHtml(bands) {
 
   return `<div class="card">
     <h2>Time by heart rate</h2>
-    <p class="subtle">How long your heart spent in each range. Bands are exclusive, so
-       any threshold is the sum of the bands above it.</p>
     <div class="field" style="border:none">
       <span>Time above</span>
       <select id="hr-threshold">
@@ -144,6 +144,11 @@ function hrBandCardHtml(bands) {
         <div class="share-track"><div class="share-fill"
           style="width:${max ? (r.seconds / max * 100).toFixed(1) : 0}%"></div></div>
       </div>`).join('')}
+    <details class="why"><summary>How this is measured</summary>
+      <p class="subtle">Bands are exclusive, so any threshold is the sum of the bands
+         above it. Each reading counts for the gap until the next one, capped at five
+         minutes — a longer gap means the watch was off, not a slow heartbeat.</p>
+    </details>
   </div>`;
 }
 
@@ -151,8 +156,6 @@ function hrByActivityCardHtml(hr) {
   if (!hr.length) return '';
   return `<div class="card">
     <h2>Effort by sport</h2>
-    <p class="subtle">Average heart rate, weighted by how long each session lasted — a
-       ten-minute warm-up should not count as much as a two-hour ride.</p>
     <div class="table-wrap"><table class="data-table">
       <thead><tr><th>Sport</th><th class="num">Average</th><th class="num">Hardest session</th>
         <th class="num">Sessions</th></tr></thead>
@@ -163,6 +166,9 @@ function hrByActivityCardHtml(hr) {
         <td class="num">${h.sessions}</td>
       </tr>`).join('')}</tbody>
     </table></div>
+    <details class="why"><summary>How this is averaged</summary>
+      <p class="subtle">Weighted by session length, so a ten-minute warm-up does not
+         count as much as a two-hour ride.</p></details>
   </div>`;
 }
 
@@ -178,13 +184,12 @@ function paceCardHtml(sessions) {
 
   return `<div class="card">
     <h2>Running pace</h2>
-    <p class="subtle">Each month's pace is its total time over its total distance, so one
-       short sprint does not outweigh a long steady run. Faster is higher on the chart.</p>
     <div class="hero-inline">${escHtml(formatPace(last.pace))}
       <span class="subtle">${change > 5 ? `${formatPace(Math.abs(change)).replace(' /km', '')} per km faster than ${monthName(first.month)}`
         : change < -5 ? `${formatPace(Math.abs(change)).replace(' /km', '')} per km slower than ${monthName(first.month)}`
         : 'about the same as when this record starts'}</span></div>
     <div class="chart-wrap"><div id="pace-chart"></div></div>
+    <p class="subtle">Faster is higher on the chart.</p>
     <h3>Fastest runs</h3>
     <div class="table-wrap"><table class="data-table">
       <thead><tr><th>Date</th><th class="num">Pace</th><th class="num">Distance</th></tr></thead>
@@ -194,6 +199,9 @@ function paceCardHtml(sessions) {
         <td class="num">${escHtml(formatMetric('distance_run', b.distanceM))}</td>
       </tr>`).join('')}</tbody>
     </table></div>
+    <details class="why"><summary>How pace is calculated</summary>
+      <p class="subtle">Each month is its total time over its total distance, so one
+         short sprint does not outweigh a long steady run.</p></details>
   </div>`;
 }
 

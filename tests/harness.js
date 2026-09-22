@@ -63,6 +63,7 @@ function loadApp() {
       formatMetricAxis, niceCeiling, barPath,
       // taxonomy
       ACTIVITIES, canonicalActivity, activitiesCompatible,
+      humaniseRawActivity, activityLabel, activityGroupKey,
       // records
       hash64, makeSession, makeDaily, sourceLabel,
       // import

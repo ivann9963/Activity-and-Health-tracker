@@ -36,8 +36,51 @@ const APPLE_ACTIVITY_MAP = {
   Rowing: 'rowing',
   Elliptical: 'elliptical',
   HighIntensityIntervalTraining: 'hiit',
-  Yoga: 'yoga', MindAndBody: 'yoga'
+  Yoga: 'yoga', MindAndBody: 'yoga', Pilates: 'yoga', Barre: 'yoga',
+  // Anything unmapped keeps its own name rather than collapsing into "Other" — see
+  // activityLabel below. These are mapped because they belong with something the app
+  // already tracks, not merely to avoid the fallback.
+  Boxing: 'strength', Kickboxing: 'strength', MartialArts: 'strength',
+  Wrestling: 'strength', CrossTraining: 'strength', PlayGround: 'other',
+  StairClimbing: 'strength', Stairs: 'strength', StepTraining: 'strength',
+  JumpRope: 'hiit', MixedCardio: 'hiit', MixedMetabolicCardioTraining: 'hiit',
+  Cooldown: 'other', PreparationAndRecovery: 'other'
 };
+
+// A readable name for a session, falling back to its own recorded type when the app
+// has no category for it.
+//
+// Collapsing an unrecognised workout into "Other" hides the one piece of information
+// that would explain it: a card reading "Other — 19% of your time" is useless, while
+// "Climbing — 19%" is an answer. Apple's own identifier is right there on the record,
+// so it is used rather than discarded.
+function humaniseRawActivity(raw) {
+  if (!raw) return null;
+  const bare = String(raw)
+    .replace(/^HKWorkoutActivityType/, '')
+    .replace(/^HKWorkoutActivity/, '');
+  if (!bare || bare === 'Other') return null;
+  // CamelCase to words: "TraditionalStrengthTraining" -> "Traditional strength training"
+  const words = bare.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// What to call a session in the interface. Known categories use their own label;
+// anything else uses the name the source gave it.
+function activityLabel(activity, rawActivity) {
+  if (activity && activity !== 'other') {
+    return (ACTIVITIES[activity] || {}).label || activity;
+  }
+  return humaniseRawActivity(rawActivity) || 'Unlabelled';
+}
+
+// Grouping key: known categories group together, unrecognised ones group by their own
+// type so two different unmapped sports never merge into one bar.
+function activityGroupKey(activity, rawActivity) {
+  if (activity && activity !== 'other') return activity;
+  const named = humaniseRawActivity(rawActivity);
+  return named ? 'raw:' + named : 'other';
+}
 
 // Strava's `Activity Type` column in activities.csv is human-readable text.
 const STRAVA_ACTIVITY_MAP = {
@@ -103,5 +146,6 @@ function activitiesCompatible(a, b) {
 
 if (typeof module !== 'undefined') {
   module.exports = { ACTIVITIES, canonicalActivity, activitiesCompatible,
+                     humaniseRawActivity, activityLabel, activityGroupKey,
                      APPLE_ACTIVITY_MAP, STRAVA_ACTIVITY_MAP, FITBIT_ACTIVITY_MAP };
 }

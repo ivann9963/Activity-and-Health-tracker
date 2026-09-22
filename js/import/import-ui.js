@@ -259,6 +259,10 @@ function importHistoryHtml(imports) {
           <div class="subtle">${escHtml(b.range.from || '?')} → ${escHtml(b.range.to || '?')}
             · ${humanCount(b.counts.sessions)} workouts
             · ${humanCount(b.counts.daily)} daily figures</div>
+          ${b.sources && b.sources.length ? `<div class="subtle">recorded by
+            ${b.sources.slice(0, 6).map(src =>
+              `${escHtml(src.name)} <span class="src-count">${humanCount(src.count)}</span>`
+            ).join(' · ')}${b.sources.length > 6 ? ' …' : ''}</div>` : ''}
           <div class="subtle">imported ${new Date(b.importedAt).toLocaleString()}</div>
         </div>
         <button class="btn btn-ghost btn-small" data-undo="${escHtml(b.id)}">Undo</button>

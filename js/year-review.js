@@ -110,8 +110,8 @@ function reviewHtml(year, firstYear, lastYear, current, previous, sessions, show
       ${share.map(a => `
         <div class="share-row">
           <span class="share-label">${a.icon} ${escHtml(a.label)}</span>
-          <span class="share-value">${escHtml(formatMetric('time_gym', a.seconds))} ·
-            ${Math.round(a.pct)}%</span>
+          <span class="share-value">${escHtml(formatMetric('time_gym', a.seconds))}
+            <span class="share-pct">${Math.round(a.pct)}%</span></span>
           <div class="share-track"><div class="share-fill"
             style="width:${a.pct.toFixed(1)}%"></div></div>
         </div>`).join('')}
