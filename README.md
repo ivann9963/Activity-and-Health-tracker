@@ -54,6 +54,11 @@ It works offline once installed, and your data never leaves the device.
 
 ## Running it locally
 
+**No `npm install` needed.** The app has no runtime dependencies at all, and the unit
+tests, the build and the Worker check use only Node built-ins. The two dev
+dependencies exist solely for the browser test (Playwright) and for running the Worker
+locally (wrangler).
+
 The app is static, but it needs to be served over `http://` — a `file://` origin cannot
 register a service worker or create the import worker:
 
@@ -62,6 +67,27 @@ npm run serve      # python3 -m http.server 8000
 ```
 
 Then open http://localhost:8000.
+
+### If your machine is pointed at a private npm registry
+
+Only matters when you want the browser test or `wrangler dev`. A work machine
+configured against a corporate registry will fail `npm install` with `E401`. Either
+override it for one command:
+
+```bash
+npm install --registry=https://registry.npmjs.org/
+```
+
+…or persist it for this project only, with a `.npmrc` in the repo root:
+
+```
+registry=https://registry.npmjs.org/
+always-auth=false
+```
+
+That file is gitignored, because a registry override belongs to a machine rather than
+to the project. Check your employer's policy before routing installs to the public
+registry.
 
 ## Build and deploy
 
@@ -145,7 +171,7 @@ simply adds itself as a test user and needs no review.
 ```bash
 npm test                 # unit tests — no dependencies, no browser, ~1s
 npm run check:worker     # the Worker sources parse (they never run in the unit tests)
-npm run test:ui          # drives the real UI in Chromium (needs: npm install)
+npm run test:ui          # drives the real UI in Chromium (the one that needs npm install)
 npm run test:ui:build    # the same checks against the built output in _site/
 npm run perf             # generate a ~100MB export and measure the import path
 ```

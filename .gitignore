@@ -5,3 +5,7 @@ node_modules/
 _site/
 .dev.vars
 .wrangler/
+
+# A registry override is specific to one machine (a work laptop pointed at a
+# corporate registry, say) and should not follow the repo around.
+.npmrc
