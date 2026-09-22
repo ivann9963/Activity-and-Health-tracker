@@ -73,7 +73,7 @@ function insightsHtml(sessions, paceSessions, range, settings) {
     ${activeDaysCardHtml(days)}
     ${hrBandCardHtml(bands)}
     ${hrByActivityCardHtml(hr)}
-    ${paceCardHtml(paceSessions)}`;
+    ${notWorkouts.indexOf('running') === -1 ? paceCardHtml(paceSessions) : ''}`;
 }
 
 function shareCardHtml(share, totalSeconds, hidden) {
