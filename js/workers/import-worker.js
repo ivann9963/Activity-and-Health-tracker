@@ -21,7 +21,9 @@ importScripts(
   '../import/apple-health.js',
   '../import/csv.js',
   '../import/fitbit-parse.js',
-  '../import/fitbit-takeout.js'
+  '../import/fitbit-takeout.js',
+  '../import/activity-files.js',
+  '../import/strava.js'
 );
 
 self.onmessage = function (ev) {
@@ -45,11 +47,13 @@ self.onmessage = function (ev) {
   // pass a fraction of the second, and the alternative — holding every sample in
   // memory until the workouts arrive at the end of the file — does not survive a
   // decade of data on a phone.
+  const byCount = (done, total) => self.postMessage({ type: 'progress', done, total });
   const parse = kind === 'fitbit-zip'
-    ? importTakeout(file, entries, {
-        importBatch: batch,
-        onProgress: (done, total) => self.postMessage({ type: 'progress', done, total })
-      })
+    ? importTakeout(file, entries, { importBatch: batch, onProgress: byCount })
+    // A Strava archive is a CSV plus one small file per workout — like Takeout, it
+    // reports progress by count.
+    : kind === 'strava-zip' || kind === 'strava-csv'
+    ? importStrava(file, { kind, entry, entries }, { importBatch: batch, onProgress: byCount })
     : openStream(file, kind, entry)
         .then(stream => scanAppleWorkoutWindows(stream, {
           onProgress: bytes => self.postMessage({ type: 'progress', bytes, phase: 'windows' })

@@ -505,6 +505,39 @@ try {
   const sync = await page.locator('.card:has-text("Automatic sync")').innerText();
   check('sync explains itself when the broker is not running',
     /deployed version/.test(sync) && !/Connect Google Health/.test(sync), sync.slice(0, 200));
+
+  // --- someone with no iPhone: a Strava archive into an empty app ---
+  // A fresh context, so nothing Apple imported above can make this pass. It runs the
+  // real worker, which is the only thing that proves its importScripts list is right.
+  const fresh = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const sp = await fresh.newPage();
+  const stravaErrors = [];
+  sp.on('pageerror', e => stravaErrors.push(String(e)));
+  sp.on('console', m => { if (m.type() === 'error' && !EXPECTED_404.test(m.text()) &&
+                              !/Failed to load resource/.test(m.text())) stravaErrors.push(m.text()); });
+  await sp.goto(base + '#/data', { waitUntil: 'networkidle' });
+  await sp.waitForSelector('#dropzone');
+  const help = await sp.locator('.card:has-text("How to get your exports")').innerText();
+  check('the export help leads with direct routes, not a relay through Apple',
+    /no\s+iPhone needed/i.test(help) && !/easy route/i.test(help), help.slice(0, 300));
+  await sp.locator('#file-input').setInputFiles(path.join(REPO, 'tests/fixtures/strava-sample.zip'));
+  await sp.waitForSelector('#inspection-result .card', { timeout: 20000 });
+  const stravaReport = await sp.locator('#inspection-result').innerText();
+  check('a Strava archive is recognised and offered for import',
+    /Strava bulk export/.test(stravaReport) && await sp.locator('#do-import').count() === 1,
+    stravaReport.slice(0, 300));
+  check('it says which workouts bring heart rate',
+    /2 of 3 workouts have their recording/.test(stravaReport), stravaReport.slice(0, 400));
+  await sp.locator('#do-import').click();
+  await sp.waitForFunction(
+    () => [...document.querySelectorAll('.toast')].some(t => /Imported 3 workouts/.test(t.textContent)),
+    null, { timeout: 30000 });
+  check('all three Strava workouts import', true);
+  await sp.waitForSelector('.list-row');
+  const stravaData = await sp.locator('#view-host').innerText();
+  check('the import names Strava as its source', /Strava/.test(stravaData), stravaData.slice(0, 300));
+  check('no console errors in the Strava run', stravaErrors.length === 0, stravaErrors.join('\n    '));
+  await fresh.close();
 } catch (err) {
   failures++;
   console.log(`  \x1b[31m✗ threw: ${err.message}\x1b[0m`);

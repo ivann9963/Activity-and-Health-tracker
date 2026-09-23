@@ -473,7 +473,7 @@ async function zipTests() {
   const sniff2 = await app.sniffFile(bare);
   eq('a bare export.xml is recognised too', sniff2.kind, 'apple-xml');
 
-  const csv = namedBlob(new Blob(['Activity ID,Activity Date,Activity Type\n1,"Mar 12, 2024, 6:00:00 PM",Run\n']), 'activities.csv');
+  const csv = namedBlob(new Blob(['Activity ID,Activity Date,Activity Type,Elapsed Time\n1,"Mar 12, 2024, 6:00:00 PM",Run,1800\n']), 'activities.csv');
   eq('a Strava CSV is recognised', (await app.sniffFile(csv)).kind, 'strava-csv');
 
   const report = await app.inspectFile(zip);
@@ -1698,6 +1698,250 @@ function insightsTests() {
   });
 }
 
+// --- Strava and workout files ------------------------------------------------------
+// A FIT file built byte by byte, so the decoder is tested against the format rather
+// than against its own output.
+function buildFit(t0) {
+  const bytes = [];
+  const u8 = v => bytes.push(v & 0xFF);
+  const u16 = v => { u8(v); u8(v >> 8); };
+  const u32 = v => { u16(v & 0xFFFF); u16(v >>> 16); };
+  const def = (local, global, fields) => {
+    u8(0x40 | local); u8(0); u8(0); u16(global); u8(fields.length);
+    for (const [num, size, type] of fields) { u8(num); u8(size); u8(type); }
+  };
+  def(0, 20, [[253, 4, 0x86], [3, 1, 0x02]]);         // record, with timestamp
+  def(1, 20, [[3, 1, 0x02]]);                          // record, compressed timestamp
+  def(2, 34, [[253, 4, 0x86], [5, 4, 0x86]]);          // activity
+  def(3, 18, [[2, 4, 0x86], [7, 4, 0x86], [9, 4, 0x86]]); // session
+  u8(0); u32(t0); u8(130);
+  u8(0); u32(t0 + 10); u8(150);
+  u8(0x80 | (1 << 5) | ((t0 + 20) & 0x1F)); u8(170);   // 10s later, five bits of time
+  u8(0); u32(t0 + 30); u8(0xFF);                       // strap dropped: invalid, skipped
+  u8(0); u32(t0 + 40); u8(165);
+  u8(3); u32(t0); u32(1800000); u32(520000);           // 30 min, 5.2 km
+  u8(2); u32(t0 + 1800); u32(t0 + 1800 + 3600);        // watch was on UTC+1
+  const data = new Uint8Array(bytes);
+  const out = new Uint8Array(14 + data.length + 2);
+  const v = new DataView(out.buffer);
+  v.setUint8(0, 14); v.setUint8(1, 0x20); v.setUint16(2, 2100, true);
+  v.setUint32(4, data.length, true);
+  out.set([0x2E, 0x46, 0x49, 0x54], 8);
+  out.set(data, 14);
+  return out;
+}
+
+async function gzip(bytes) {
+  return new Uint8Array(await new Response(new Blob([bytes]).stream()
+    .pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+}
+
+const FIT_EPOCH = Date.UTC(1989, 11, 31);
+const RUN_START = Date.parse('2024-03-12T16:00:00Z');
+
+const STRAVA_HEADER = 'Activity ID,Activity Date,Activity Name,Activity Type,Activity Description,' +
+  'Elapsed Time,Distance,Max Heart Rate,Filename,Elapsed Time,Moving Time,Distance,' +
+  'Average Heart Rate,Calories';
+const STRAVA_CSV = [
+  STRAVA_HEADER,
+  '101,"Mar 12, 2024, 4:00:00 PM",Evening Run,Run,"hills, then flat",1800,5.20,180,activities/101.fit.gz,1800.0,1700.0,5200.5,152,400',
+  '102,"Mar 13, 2024, 7:00:00 AM",Padel with Sam,Padel,,5400,0,,activities/102.gpx,5400,5400,0,,',
+  '103,"Mar 14, 2024, 7:00:00 AM",Commute,Ride,,3600,20.0,,activities/103.tcx.gz,3600,3500,20000,,',
+  '104,"Mar 15, 2024, 7:00:00 AM",Legs,Weight Training,,2700,0,,,2700,2700,0,,',
+  '105,"not a date",Broken,Run,,1800,5,,,1800,1800,5000,,'
+].join('\n');
+
+const GPX = `<?xml version="1.0"?><gpx><trk><trkseg>
+  <trkpt lat="1" lon="1"><time>2024-03-13T07:00:00Z</time><extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>110</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+  <trkpt lat="1" lon="1"><time>2024-03-13T07:00:30Z</time><extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>145</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+  <trkpt lat="1" lon="1"><time>2024-03-13T07:01:00Z</time><extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>150</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+</trkseg></trk></gpx>`;
+
+const TCX = `<?xml version="1.0"?><TrainingCenterDatabase><Activities><Activity Sport="Biking">
+  <Lap StartTime="2024-03-14T07:00:00Z"><TotalTimeSeconds>3600</TotalTimeSeconds><DistanceMeters>19950.5</DistanceMeters><Track>
+    <Trackpoint><Time>2024-03-14T07:00:00Z</Time><DistanceMeters>0</DistanceMeters><HeartRateBpm><Value>100</Value></HeartRateBpm></Trackpoint>
+    <Trackpoint><Time>2024-03-14T07:20:00Z</Time><DistanceMeters>9000</DistanceMeters><HeartRateBpm><Value>125</Value></HeartRateBpm></Trackpoint>
+  </Track></Lap></Activity></Activities></TrainingCenterDatabase>`;
+
+async function stravaArchive() {
+  return makeZip({
+    'export_1/activities.csv': STRAVA_CSV,
+    'export_1/activities/101.fit.gz': await gzip(buildFit((RUN_START - FIT_EPOCH) / 1000)),
+    'export_1/activities/102.gpx': GPX,
+    'export_1/activities/103.tcx.gz': await gzip(new TextEncoder().encode(TCX))
+  });
+}
+
+async function stravaTests() {
+  suite('Strava dates are UTC, in the words Strava writes them', () => {
+    eq('US order, afternoon', app.parseStravaDate('Mar 12, 2024, 4:00:00 PM'), RUN_START);
+    eq('twelve AM is midnight', app.parseStravaDate('Mar 12, 2024, 12:05:00 AM'),
+       Date.parse('2024-03-12T00:05:00Z'));
+    eq('twelve PM is noon', app.parseStravaDate('Mar 12, 2024, 12:05:00 PM'),
+       Date.parse('2024-03-12T12:05:00Z'));
+    eq('day first, 24-hour clock', app.parseStravaDate('12 Mar 2024, 16:00:00'), RUN_START);
+    eq('ISO', app.parseStravaDate('2024-03-12 16:00:00'), RUN_START);
+    eq('anything else is unreadable, not guessed', app.parseStravaDate('not a date'), null);
+  });
+
+  suite('Strava columns — the second Distance is metres', () => {
+    const parsed = app.readStravaActivities(STRAVA_CSV);
+    eq('every placeable row is read', parsed.activities.length, 4);
+    eq('the one that is not is counted', parsed.notes['unreadable date'], 1);
+    eq('distance comes from the SI column', parsed.activities[0].distanceM, 5200.5);
+    eq('moving time is the duration', parsed.activities[0].durationSec, 1700);
+    eq('elapsed time is the span', parsed.activities[0].spanSec, 1800);
+    eq('a comma inside a quoted description shifts nothing', parsed.activities[0].avgHr, 152);
+    eq('a zero distance is no distance', parsed.activities[1].distanceM, null);
+
+    const old = app.readStravaActivities('Activity ID,Activity Date,Activity Type,Elapsed Time,Distance\n' +
+      '1,"Mar 12, 2024, 4:00:00 PM",Run,1800,5.2\n');
+    eq('one Distance column states no unit, so it is not read', old.activities[0].distanceM, null);
+    eq('and that is reported', old.distanceUnitKnown, false);
+  });
+
+  const fit = app.parseFit(buildFit((RUN_START - FIT_EPOCH) / 1000).buffer);
+  suite('FIT — the decoder reads the fields it needs and skips the rest', () => {
+    eq('every reading, compressed timestamps included, a dropped one as null',
+       fit.samples.map(s => s.bpm), [130, 150, 170, null, 165]);
+    eq('the compressed reading lands ten seconds on',
+       fit.samples[2].ms - fit.samples[1].ms, 10000);
+    eq('the offset the watch was set to', fit.offsetMin, 60);
+    eq('distance from the session, in metres', fit.distanceM, 5200);
+    eq('start from the session', fit.startMs, RUN_START);
+    let threw = false;
+    try { app.parseFit(new Uint8Array(20).buffer); } catch (e) { threw = true; }
+    ok('a file that is not FIT is refused, not half-read', threw);
+  });
+
+  suite('GPX and TCX', () => {
+    const g = app.parseGpx(GPX);
+    eq('GPX heart rate from a namespaced element', g.samples.map(s => s.bpm), [110, 145, 150]);
+    eq('GPX states no offset', g.offsetMin, null);
+    const t = app.parseTcx(TCX);
+    eq('TCX heart rate', t.samples.map(s => s.bpm), [100, 125]);
+    eq('TCX distance is the lap total, not a trackpoint', t.distanceM, 19950.5);
+    eq('file kinds by name', [app.activityFileFormat('a/1.fit.gz'), app.activityFileFormat('1.GPX'),
+                              app.activityFileFormat('1.csv')],
+       [{ format: 'fit', gzip: true }, { format: 'gpx', gzip: false }, null]);
+  });
+
+  suite('heart rate from a workout file', () => {
+    const b = app.bandsFromSamples([{ ms: 0, bpm: 130 }, { ms: 10000, bpm: 150 },
+                                    { ms: 20000 + 3600000, bpm: 90 }]);
+    eq('each reading is worth the gap to the next, capped at five minutes',
+       b, { 120: 10, 140: 300 });
+    eq('one reading implies no duration', app.bandsFromSamples([{ ms: 0, bpm: 130 }]), null);
+    eq('a moment with no heart rate earns nothing',
+       app.bandsFromSamples([{ ms: 0, bpm: 130 }, { ms: 10000, bpm: null }, { ms: 90000, bpm: 130 }]),
+       { 120: 10 });
+  });
+
+  const zip = namedBlob(await stravaArchive(), 'export_1.zip');
+  const sniff = await app.sniffFile(zip);
+  suite('Strava archive — recognised', () => {
+    eq('a Strava zip is recognised in a subfolder', sniff.kind, 'strava-zip');
+  });
+
+  const res = await app.importStrava(zip, sniff, { importBatch: 'b1', importedAt: 1 });
+  const by = id => res.sessions.find(s => s.rawActivity === id);
+  suite('Strava import — the workouts keep what a relay loses', () => {
+    eq('every readable workout is imported', res.sessions.length, 4);
+    const run = by('Run');
+    eq('a run is a run', run.activity, 'running');
+    eq('with its distance', run.distanceM, 5200.5);
+    eq('the FIT file states the zone it was recorded in', run.tzOffset, 60);
+    eq('so the day is the local day', run.localDate, '2024-03-12');
+    eq('its heart rate is banded from the file, and a dropped reading ends a span',
+       run.hrBands, { 120: 10, 140: 10, 160: 10 });
+    eq('the CSV average heart rate is kept', run.avgHr, 152);
+    eq('the span is elapsed time', (run.end - run.start) / 1000, 1800);
+    eq('the duration is moving time', run.durationSec, 1700);
+    eq('it is attributed to Strava', app.sourceLabel(run.source), 'Strava');
+
+    const padel = by('Padel');
+    eq('padel is a racket sport, not "other"', padel.activity, 'racket');
+    eq('no distance is not zero distance', padel.distanceM, null);
+    eq('GPX heart rate is banded', padel.hrBands, { 100: 30, 140: 30 });
+    eq('with no stated average, the readings give one', padel.avgHr, 135);
+
+    const ride = by('Ride');
+    eq('a ride keeps its CSV distance over the file', ride.distanceM, 20000);
+    eq('TCX heart rate is banded', ride.hrBands, { 100: 300 });
+    const legs = by('Weight Training');
+    eq('a workout entered by hand still counts', legs.activity, 'strength');
+    eq('and has no heart rate', legs.hrBands, null);
+    eq('it is reported as having no file', res.meta.notes['no workout file (entered by hand)'], 1);
+    eq('coverage comes from the records', [res.tally.from, res.tally.to].map(d => d && d.slice(0, 7)),
+       ['2024-03', '2024-03']);
+  });
+
+  const again = await app.importStrava(zip, sniff, { importBatch: 'b2', importedAt: 2 });
+  suite('Strava import is idempotent', () => {
+    eq('the same archive mints the same ids', again.sessions.map(s => s.id).sort(),
+       res.sessions.map(s => s.id).sort());
+  });
+
+  const csvOnly = namedBlob(new Blob([STRAVA_CSV]), 'activities.csv');
+  const csvSniff = await app.sniffFile(csvOnly);
+  const fromCsv = await app.importStrava(csvOnly, csvSniff, {});
+  suite('Strava CSV on its own', () => {
+    eq('is recognised', csvSniff.kind, 'strava-csv');
+    eq('imports every workout', fromCsv.sessions.length, 4);
+    eq('without heart rate', fromCsv.sessions.every(s => s.hrBands == null), true);
+  });
+
+  const report = await app.inspectFile(zip);
+  suite('Strava inspection agrees with the import', () => {
+    eq('the same count', report.totals.workouts, res.sessions.length);
+    eq('and says how many carry a recording', report.strava.withFile, 3);
+    ok('the text report says so too', /3 workouts have a recording file/.test(app.inspectionReportText(report)));
+  });
+
+  suite('a relayed copy matches the direct record', () => {
+    // What Strava writes into Apple Health for a sport Apple has no type for.
+    const padel = by('Padel');
+    const relayed = app.makeSession({
+      activity: 'other', rawActivity: 'HKWorkoutActivityTypeOther',
+      start: padel.start + 2000, end: padel.end + 1000, tzOffset: padel.tzOffset,
+      source: { vendor: 'apple', app: 'Strava', device: 'Strava' }
+    });
+    const d = app.dedupeSessions([padel, relayed], app.DEFAULT_SETTINGS, {});
+    const kept = d.filter(x => !x.supersededBy);
+    eq('the same padel from two exports counts once', kept.length, 1);
+    eq('and the copy that knows it was padel is the one kept', kept[0].record.activity, 'racket');
+
+    // Even a better-ranked source loses to a copy that can name the workout, and the
+    // effort it measured is not lost with it.
+    const watch = app.makeSession({
+      activity: 'other', rawActivity: 'HKWorkoutActivityTypeOther',
+      start: padel.start, end: padel.end, tzOffset: padel.tzOffset,
+      hrBands: { 140: 5000 },
+      source: { vendor: 'apple', app: 'Apple Health', device: 'Apple Watch' }
+    });
+    const w = app.dedupeSessions([padel, watch], app.DEFAULT_SETTINGS, {});
+    const winner = w.find(x => !x.supersededBy);
+    eq('a named copy beats an unnamed one whatever recorded it', winner.record.activity, 'racket');
+    eq('and inherits the richer heart rate', winner.hrBands, { 140: 5000 });
+
+    const hike = app.makeSession({ activity: 'hiking', start: padel.start, end: padel.end,
+      source: { vendor: 'strava', app: 'Strava' } });
+    const later = app.makeSession({ activity: 'other', start: padel.start + 3 * 3600000,
+      end: padel.end + 3 * 3600000, source: { vendor: 'apple', device: 'Apple Watch' } });
+    eq('an unnamed workout hours later is still its own workout',
+       app.dedupeSessions([hike, later], app.DEFAULT_SETTINGS, {}).filter(x => !x.supersededBy).length, 2);
+  });
+
+  suite('the import worker can load the Strava reader', () => {
+    const worker = fs.readFileSync(path.join(__dirname, '..', 'js/workers/import-worker.js'), 'utf8');
+    ok('activity-files.js is in importScripts', worker.includes("'../import/activity-files.js'"));
+    ok('strava.js is in importScripts', worker.includes("'../import/strava.js'"));
+    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    ok('and the page loads both', html.includes('js/import/activity-files.js') &&
+                                   html.includes('js/import/strava.js'));
+  });
+}
+
 // --- run ------------------------------------------------------------------------------
 (async () => {
   try {
@@ -1719,6 +1963,7 @@ function insightsTests() {
     await takeoutTests();
     fitbitParseTests();
     await fitbitImportTests();
+    await stravaTests();
   } catch (err) {
     failed++;
     console.log(`\n${C.red}Uncaught: ${err && err.stack || err}${C.off}`);

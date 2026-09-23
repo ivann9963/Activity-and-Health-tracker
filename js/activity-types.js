@@ -188,17 +188,22 @@ function canonicalActivity(vendor, raw) {
 
 // Two sessions can only be duplicates of each other if their activities are
 // compatible. They need not be identical: Strava logs a pool swim as 'Swim' while
-// Apple may have split it differently, and a gym session is variously 'strength',
-// 'hiit' or 'other' depending on which app recorded it.
+// Apple may have split it differently, and a gym session is variously 'strength' or
+// 'hiit' depending on which app recorded it.
+//
+// 'other' is compatible with everything. It is not a sport, it is the absence of one:
+// a relay that could not name the workout writes it as Other, and that copy must still
+// match the direct record that knows it was a hike — or the hike is counted twice in
+// every total of time and in the streaks. The start-time and overlap rules still have
+// to agree, so an unnamed session only ever merges with one that began with it.
 const COMPATIBLE_ACTIVITIES = [
-  ['strength', 'hiit', 'other'],
-  ['running', 'walking'],   // short runs are often auto-detected as walks and vice versa
-  ['cycling', 'other'],
-  ['racket', 'other']
+  ['strength', 'hiit'],
+  ['running', 'walking']    // short runs are often auto-detected as walks and vice versa
 ];
 
 function activitiesCompatible(a, b) {
   if (a === b) return true;
+  if (a === 'other' || b === 'other') return true;
   return COMPATIBLE_ACTIVITIES.some(group => group.includes(a) && group.includes(b));
 }
 

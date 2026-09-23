@@ -135,8 +135,8 @@ function renderInspection(rep) {
   const span = rep.range.from && rep.range.to ? `${rep.range.from} → ${rep.range.to}` : 'unknown';
   const years = rep.range.from && rep.range.to
     ? (daysBetween(rep.range.from, rep.range.to) / 365.25) : 0;
-  const importable = ['apple-zip', 'apple-xml', 'fitbit-zip', 'app-backup']
-    .indexOf(rep.file.kind) !== -1;
+  const importable = ['apple-zip', 'apple-xml', 'fitbit-zip', 'strava-zip', 'strava-csv',
+                      'app-backup'].indexOf(rep.file.kind) !== -1;
 
   host.innerHTML = `
     <div class="card">
@@ -146,9 +146,14 @@ function renderInspection(rep) {
         ${rep.takeout
           ? statTile('Folders', humanCount(rep.types.length), '')
           : statTile('Workouts', humanCount(rep.totals.workouts), '')}
-        ${statTile(rep.takeout ? 'Data files' : 'Records', humanCount(rep.totals.records),
-                   `read in ${(rep.ms / 1000).toFixed(1)}s`)}
+        ${rep.strava
+          ? statTile('Heart rate', `${humanCount(rep.strava.withFile)} of ${humanCount(rep.totals.workouts)}`,
+                     'workouts with a recording')
+          : statTile(rep.takeout ? 'Data files' : 'Records', humanCount(rep.totals.records),
+                     `read in ${(rep.ms / 1000).toFixed(1)}s`)}
       </div>
+
+      ${rep.strava ? stravaNoteHtml(rep) : ''}
 
       ${importable ? `<div class="card-actions">
         <button class="btn btn-primary" id="do-import">${rep.file.kind === 'app-backup'
@@ -157,7 +162,7 @@ function renderInspection(rep) {
       </div>` : `<p class="subtle">Importing this kind of file is not supported yet.</p>
         ${copyReportButton()}`}
 
-      ${(rep.takeout || rep.isBackup) ? '' : `
+      ${(rep.takeout || rep.isBackup || rep.strava) ? '' : `
       <h3>Who recorded it</h3>
       <p class="subtle">Each device that contributed data. Overlapping sources are the
          reason this app reconciles rather than adds up.</p>
@@ -237,6 +242,33 @@ function startImport(file) {
       if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
     })
     .finally(() => { _busy = false; });
+}
+
+// What a Strava file will and will not bring, said before importing rather than
+// discovered afterwards as a blank heart-rate chart.
+function stravaNoteHtml(rep) {
+  const st = rep.strava;
+  const n = rep.totals.workouts;
+  const lines = [];
+  if (st.archive) {
+    lines.push(`${humanCount(st.withFile)} of ${plural(n, 'workout')} have their recording in
+      the archive — those bring heart rate, and a FIT file also brings the time zone it was
+      recorded in.`);
+  } else {
+    lines.push(`This is <code>activities.csv</code> on its own: every workout, but no heart
+      rate, and dates placed in this device's time zone. Drop the whole <code>.zip</code>
+      instead to get both.`);
+  }
+  if (!st.distanceUnitKnown) {
+    lines.push(`This file gives distance in one column without saying whether it is
+      kilometres or miles, so distance is left blank rather than guessed.`);
+  }
+  const skipped = Object.entries(st.notes || {});
+  if (skipped.length) {
+    lines.push('Not imported: ' + skipped.map(([k, v]) => `${humanCount(v)} × ${escHtml(k)}`)
+      .join(', ') + '.');
+  }
+  return lines.map(l => `<p class="subtle">${l}</p>`).join('');
 }
 
 // Reconciliation is worth surfacing — the totals depend on it — but it is a property
@@ -332,12 +364,47 @@ function wireCopyButton(rep) {
 
 // Getting the exports is the one part of this the app cannot do for you, so the
 // instructions live next to the drop zone rather than in a README nobody opens.
+//
+// Every route here is DIRECT: each file comes from the service that recorded the data.
+// Relaying one service through another (Google Health or Strava into Apple Health, then
+// exporting Apple) was once suggested here, and it is where most disagreements between
+// this app and the source apps came from — sports arrive as "Other", distances go
+// missing, and the relay only reaches back as far as it was switched on.
 function exportHelpHtml() {
   return `
   <div class="card">
     <h2>How to get your exports</h2>
+    <p class="subtle">Import straight from each service that recorded your data — no
+       iPhone needed. Import as many as you use: the same workout found in two files is
+       counted once, and the direct copy is the one kept.</p>
+    <details open>
+      <summary><strong>Google Health</strong> (formerly Fitbit) — steps, sleep, heart rate,
+        weight and workouts</summary>
+      <ol>
+        <li>Go to <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a>
+            and sign in with the account the watch uses.</li>
+        <li>Press <strong>Deselect all</strong>, then tick <strong>Fitbit</strong> — Google
+            renamed the app but not the Takeout category, so that checkbox is your Google
+            Health data.</li>
+        <li><strong>Next step</strong> → export once → <strong>.zip</strong> → the largest
+            file size, so it arrives as one archive → <strong>Create export</strong>. Google emails a link, usually within hours.</li>
+      </ol>
+      <p class="subtle">Drop the <code>.zip</code> in as-is.</p>
+    </details>
+    <details open>
+      <summary><strong>Strava</strong> — workouts, with their sport, distance and heart rate</summary>
+      <ol>
+        <li>On strava.com, open <strong>Settings → My Account</strong>.</li>
+        <li>Choose <strong>Download or Delete Your Account</strong>, then <strong>Get Started</strong>.</li>
+        <li>Under <em>Download Request</em>, click <strong>Request your archive</strong>.</li>
+        <li>Strava emails a link, usually within a few hours.</li>
+      </ol>
+      <p class="subtle">Drop the whole <code>.zip</code>, not just <code>activities.csv</code>
+         — the per-workout files inside it carry the heart rate and the time zone. Any
+         watch that syncs to Strava (Garmin, Coros, Polar, Suunto, Wahoo) arrives this way.</p>
+    </details>
     <details>
-      <summary><strong>Apple Health</strong> — your full history</summary>
+      <summary><strong>Apple Health</strong> — if you have an iPhone</summary>
       <ol>
         <li>Open the <strong>Health</strong> app on your iPhone.</li>
         <li>Tap your <strong>profile picture</strong>, top right.</li>
@@ -347,31 +414,14 @@ function exportHelpHtml() {
       <p class="subtle">Drop the <code>.zip</code> in as-is; there is no need to unzip it.</p>
     </details>
     <details>
-      <summary><strong>Strava</strong> — your rides, runs and swims</summary>
-      <ol>
-        <li>On strava.com, open <strong>Settings → My Account</strong>.</li>
-        <li>Choose <strong>Download or Delete Your Account</strong>, then <strong>Get Started</strong>.</li>
-        <li>Under <em>Download Request</em>, click <strong>Request your archive</strong>.</li>
-        <li>Strava emails a link, usually within a few hours.</li>
-      </ol>
-    </details>
-    <details open>
-      <summary><strong>Google Health</strong> (the app formerly called Fitbit)</summary>
-      <p><strong>The easy route — no second file needed.</strong> Google Health can push
-         its data back into Apple Health, so one Apple export then covers both. In the
-         <strong>Google Health</strong> app: tap your <strong>profile icon</strong> →
-         <strong>Partner apps</strong> → <strong>Apple Health</strong> →
-         <strong>Get started</strong> → <strong>Agree</strong>, then grant every metric
-         you care about. If it offers a history window, choose the longest one.</p>
-      <p>Afterwards, redo the Apple Health export above and drop it here. The report
-         will show <em>Google Health</em> as a recording source, and its date range tells
-         you how far back the sync actually reached.</p>
-      <p><strong>The thorough route.</strong> Go to
-         <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a>,
-         press <em>Deselect all</em>, then tick <strong>Fitbit</strong> — Google renamed
-         the app but not the Takeout category, so that checkbox is your Google Health
-         data. Drop the resulting archive here and the report will show exactly what is
-         inside it.</p>
+      <summary>Why not send everything into Apple Health first?</summary>
+      <p>Because what arrives there is a copy of a copy. A sport Apple has no type for is
+         written as <em>Other</em> and counts toward nothing; a relayed workout often
+         loses its distance; and the relay only reaches back as far as the day it was
+         switched on. The numbers then disagree with the app that recorded them.</p>
+      <p>If you have already relayed data that way, you do not need to undo it. Import the
+         direct export too: each workout is matched to its relayed copy, the direct one
+         is kept, and <strong>Check a date range</strong> above names every decision.</p>
     </details>
   </div>`;
 }
