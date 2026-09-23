@@ -35,17 +35,18 @@ function sniffZip(file) {
                detail: `${entries.length} files in the archive`,
                entry: appleXml, entries };
     }
-    const stravaCsv = find(/(^|\/)activities\.csv$/i);
-    if (stravaCsv) {
-      return { kind: 'strava-zip', label: 'Strava bulk export',
-               detail: `${entries.length} files in the archive`,
-               entry: stravaCsv, entries };
-    }
     // Google renamed the Fitbit app to Google Health in May 2026 but kept the Takeout
     // data category as "Fitbit", so the archive still says Takeout/Fitbit/.
     if (isTakeoutArchive(entries)) {
       return { kind: 'fitbit-zip', label: 'Google Health (Fitbit) export',
                detail: `${entries.length} files in the archive`, entries };
+    }
+    // After Takeout, so a stray activities.csv in some other archive cannot claim it.
+    const stravaCsv = find(/(^|\/)activities\.csv$/i);
+    if (stravaCsv) {
+      return { kind: 'strava-zip', label: 'Strava bulk export',
+               detail: `${entries.length} files in the archive`,
+               entry: stravaCsv, entries };
     }
     return { kind: 'unknown-zip', label: 'Unrecognised archive',
              detail: names.slice(0, 5).join(', '), entries };

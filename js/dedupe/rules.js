@@ -46,8 +46,16 @@ function richness(session) {
 }
 
 // Pick the winner among candidates for the same event.
+//
+// A copy that names its sport beats one that does not, before source rank is asked.
+// 'other' belongs to no metric, so electing it would take the workout out of every
+// tile — and it is exactly what a relay writes when it cannot name what it carries
+// (Strava into Apple Health, for one). Heart rate is not lost by this: the winner
+// inherits the richest band set in its group whichever copy that came from.
 function pickWinner(candidates, settings) {
   return candidates.slice().sort((a, b) => {
+    const named = (b.activity !== 'other') - (a.activity !== 'other');
+    if (named) return named;
     const rank = sourceRank(settings, sourceLabel(b.source)) - sourceRank(settings, sourceLabel(a.source));
     if (rank) return rank;
     const rich = richness(b) - richness(a);

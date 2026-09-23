@@ -15,15 +15,6 @@ function importFile(file, callbacks) {
     if (IMPORTABLE_KINDS.indexOf(sniff.kind) === -1) {
       throw new Error(`${sniff.label} cannot be imported yet.`);
     }
-    // Recognised but not yet wired up. Saying so plainly beats letting the file reach
-    // a parser that cannot read it and surfacing whatever error that produces.
-    const NOT_YET = {
-      'strava-zip': 'Strava import', 'strava-csv': 'Strava import'
-    };
-    if (NOT_YET[sniff.kind]) {
-      throw new Error(`${NOT_YET[sniff.kind]} is not finished yet — for now, import your ` +
-                      `Apple Health or Google Health export.`);
-    }
     if (sniff.kind === 'app-backup') {
       stage('Reading the backup');
       return readBackupFile(file)
@@ -91,6 +82,12 @@ function parseInline(file, sniff, batch, cb) {
     return importTakeout(file, sniff.entries, {
       importBatch: batch,
       onProgress: (done, total) => cb.onStage && cb.onStage(`Reading files (${done} of ${total})`)
+    });
+  }
+  if (sniff.kind === 'strava-zip' || sniff.kind === 'strava-csv') {
+    return importStrava(file, sniff, {
+      importBatch: batch,
+      onProgress: (done, total) => cb.onStage && cb.onStage(`Reading workouts (${done} of ${total})`)
     });
   }
   // Same two passes as the worker; see the comment there for why.

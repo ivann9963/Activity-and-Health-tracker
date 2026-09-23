@@ -86,6 +86,14 @@ plausible and are wrong.
   `sessions`, `withoutValue` and `secondsWithoutValue` alongside the total so a view
   can say "1 session, no distance recorded" instead. The total itself stays `null`,
   never `0`: "no distance recorded" and "ran zero kilometres" are different claims.
+- **`other` is not a sport, it is the absence of one.** It is compatible with every
+  activity for matching (`activitiesCompatible`), and a copy that names its sport beats
+  one that does not before source rank is consulted (`pickWinner`). A relay writes
+  Other when it cannot name what it carries; without these two rules the relayed copy
+  and the direct record of the same hike were both counted, or the unnamed one won and
+  the workout left every tile. Start-time and overlap rules still apply, so an unnamed
+  session only merges with one that began with it. Bands are unaffected — the winner
+  inherits the richest set anyway.
 - **A reading is worth the gap to the next reading of the SAME workout.** Across a
   boundary it is worth nothing. Closing the last reading of a workout against the end
   of the workout would invent up to five minutes of effort per session.
@@ -280,7 +288,23 @@ the next deploy, so one added that way works until the next push and then stops.
 
 ## Sources
 
-Apple Health export is the historical backbone; there is no API and never will be.
+**Every route is direct: each file comes from the service that recorded the data.**
+The Data screen once suggested relaying Google Health into Apple Health and importing
+one Apple export; that relay is where most disagreements with the source apps came
+from (sports as Other, lost distances, history only from the day it was switched on),
+and it is useless to anyone without an iPhone. Don't bring it back.
+
+- **Apple Health export** — for people with an iPhone; there is no API and never will be.
+- **Google Health Takeout** (`fitbit-takeout.js`) — steps, sleep, resting HR, weight,
+  workouts.
+- **Strava bulk export** (`strava.js` + `activity-files.js`) — workouts. `activities.csv`
+  repeats column names; the LAST `Distance` is metres, and a CSV with only one has no
+  stated unit, so distance is `null`. `Activity Date` is UTC. The per-workout
+  FIT/GPX/TCX files give heart rate; only FIT states the UTC offset, so GPX/TCX/CSV-only
+  workouts fall back to the browser's zone at that instant (Fitbit's compromise). A
+  heart-rate record with no value is a gap-closer, not a skipped row. Duration is
+  Strava's moving time; the span (`end - start`) is elapsed time, so copies overlap.
+
 Google renamed Fitbit to Google Health in 2026 and retired the Fitbit Web API
 outright, so live sync means the Google Health API — which issues a client secret,
 which is why `worker/` exists. The broker handles **tokens only**; health data goes

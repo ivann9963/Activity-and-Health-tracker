@@ -37,7 +37,7 @@ function inspectFile(file, onProgress) {
       const textOf = sniff.kind === 'strava-zip'
         ? zipEntryText(file, sniff.entry) : file.text();
       return textOf
-        .then(text => summariseStrava(text))
+        .then(text => summariseStrava(text, sniff.kind === 'strava-zip' ? sniff.entries : null))
         .then(res => ({ ...base, ...res, ms: Date.now() - startedAt }));
     }
     return { ...base, unsupported: true, ms: Date.now() - startedAt };
@@ -103,41 +103,40 @@ function summariseBackup(backup) {
   };
 }
 
-function summariseStrava(text) {
-  const rows = parseCSVObjects(text);
-  const col = name => Object.keys(rows[0] || {}).find(k => k.toLowerCase().includes(name));
-  const dateCol = col('activity date');
-  const typeCol = col('activity type');
+// Read with the importer's own CSV reader, so the report cannot promise a workout the
+// import then drops, or a date the import places on a different day.
+function summariseStrava(text, entries) {
+  const parsed = readStravaActivities(text);
   const byType = Object.create(null);
-  let from = null, to = null;
+  let from = null, to = null, withFile = 0, withDistance = 0;
+  const names = entries ? new Set(entries.map(e => e.name.replace(/^.*?(activities\/)/, '$1'))) : null;
 
-  for (const r of rows) {
-    const t = (r[typeCol] || 'Unknown').trim();
-    byType[t] = (byType[t] || 0) + 1;
-    const d = stravaDateKey(r[dateCol]);
-    if (d) {
-      if (!from || d < from) from = d;
-      if (!to || d > to) to = d;
-    }
+  for (const a of parsed.activities) {
+    const t = a.rawActivity || 'Unknown';
+    const d = localDateOf(a.start, fallbackOffset(a.start));
+    const b = byType[t] || (byType[t] = { count: 0, from: null, to: null });
+    b.count++;
+    if (!b.from || d < b.from) b.from = d;
+    if (!b.to || d > b.to) b.to = d;
+    if (!from || d < from) from = d;
+    if (!to || d > to) to = d;
+    if (names && a.filename && names.has(a.filename)) withFile++;
+    if (a.distanceM != null) withDistance++;
   }
+  const n = parsed.activities.length;
+  const sources = [{ name: 'Strava', count: n }];
   return {
-    totals: { records: 0, workouts: rows.length, bytes: text.length },
+    totals: { records: 0, workouts: n, bytes: text.length },
     range: { from, to },
-    sources: [{ name: 'Strava', count: rows.length }],
-    types: Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => ({
-      type: 'Activity:' + type, count, from, to,
-      sources: [{ name: 'Strava', count }], units: [],
+    sources,
+    strava: { withFile, withDistance, distanceUnitKnown: parsed.distanceUnitKnown,
+              notes: parsed.notes, archive: !!entries },
+    types: Object.entries(byType).sort((a, b) => b[1].count - a[1].count).map(([type, t]) => ({
+      type: 'Activity:' + type, count: t.count, from: t.from, to: t.to,
+      sources, units: [],
       mapped: 'session:' + canonicalActivity('strava', type)
     }))
   };
-}
-
-// Strava writes "Mar 12, 2024, 7:41:22 AM" in the account's locale. We only need the
-// day for the report, so a permissive Date.parse is good enough here; the real
-// importer (phase 5) will be stricter.
-function stravaDateKey(s) {
-  const t = Date.parse(String(s || '').replace(/,\s*/g, ' '));
-  return isFinite(t) ? new Date(t).toISOString().slice(0, 10) : null;
 }
 
 // Plain-text rendering, for copying out of the app.
@@ -160,6 +159,15 @@ function inspectionReportText(rep) {
     ? `CONTAINS  ${rep.totals.records.toLocaleString()} data files`
     : `CONTAINS  ${rep.totals.records.toLocaleString()} records, ` +
       `${rep.totals.workouts.toLocaleString()} workouts`);
+  if (rep.strava) {
+    L.push(`FILES     ${rep.strava.archive ? rep.strava.withFile.toLocaleString() +
+           ' workouts have a recording file' : 'activities.csv only — no recording files'}`);
+    L.push(`DISTANCE  ${rep.strava.distanceUnitKnown
+      ? rep.strava.withDistance.toLocaleString() + ' workouts state one, in metres'
+      : 'unit not stated in this file — left blank'}`);
+    Object.entries(rep.strava.notes || {}).forEach(([k, v]) =>
+      L.push(`SKIPPED   ${v.toLocaleString()} × ${k}`));
+  }
   L.push(`READ IN   ${(rep.ms / 1000).toFixed(1)}s`);
   L.push('', 'RECORDING SOURCES');
   rep.sources.forEach(s => L.push(`  ${s.name.padEnd(20)} ${s.count.toLocaleString()}`));

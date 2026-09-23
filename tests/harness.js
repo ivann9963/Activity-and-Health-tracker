@@ -20,6 +20,8 @@ const FILES = [
   'js/import/apple-health.js',
   'js/import/fitbit-parse.js',
   'js/import/fitbit-takeout.js',
+  'js/import/activity-files.js',
+  'js/import/strava.js',
   'js/import/sniffer.js',
   'js/import/inspector.js',
   'js/dedupe/rules.js',
@@ -81,6 +83,8 @@ function loadApp() {
       parseFitbitSteps, parseFitbitSleep, parseFitbitExercise, parseFitbitRestingHr,
       parseFitbitWeight, parseFitbitHeartRate, createFitbitCollector, DailyBuckets,
       inspectFile, inspectionReportText,
+      parseFit, parseGpx, parseTcx, activityFileFormat, parseActivityFile, bandsFromSamples,
+      stravaColumns, parseStravaDate, readStravaActivities, stravaSession, importStrava,
       // dedupe + rollups (present from phase 3 onward)
       dedupeSessions, applySessionDecisions, applyOverride,
       unnamedSessions, applyActivityOverrides,
@@ -111,7 +115,7 @@ async function makeZip(files) {
   let offset = 0;
 
   for (const [name, content] of Object.entries(files)) {
-    const raw = enc.encode(content);
+    const raw = content instanceof Uint8Array ? content : enc.encode(content);
     const deflated = new Uint8Array(await new Response(
       new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate-raw'))
     ).arrayBuffer());
